@@ -2,29 +2,25 @@
 
 Ce plugin permet la consultation et la mise à jour simplifiée des données attributaires des sites naturels gérés par le CEN Pays de la Loire. Il offre une interface ergonomique pour garantir la cohérence des données saisies par les agents.
 
+=> Lien du dépôt GitHub : https://github.com/matthieu-cen-paysdelaloire/plugin-sites-cen.git
 
-=>  Structure des fichiers :
+=> Version : 2.0 (2026)
 
-    __init__.py : Fichier d'initialisation indispensable à Python pour reconnaître le dossier comme un paquet (package). Il contient la fonction classFactory, point d'entrée unique qui permet à QGIS de charger et de lancer l'extension.
+=> Nouveautés : 
+    - Répartition du formulaire des sites en différents onglets et sous-onglets
+    - Création d'un vusel cartographique interactif
+    - Ajout d'un second formulaire de saisie pour la visualisation de la table parcelles_cen 
+    - Création d'un boutton d'activation/désactivation du mode édition
+    - Création d'un onglet pour dresser un bilan foncier onteractif en fonction de l'année voulue
+    - Création d'un boutton permettant la mise en place d'un raccourci sur le bureau de l'utilisateur
 
-    plugin_sites_cen.py : Orchestrateur du plugin. Gère l'intégration dans QGIS, l'explorateur de fichiers pour le GeoPackage et le chargement de la couche.
 
-    plugin_sites_cen_dialog.py : Logique métier. Contient :
-
-        Le mapping entre les widgets de l'interface et les champs SIG (field_map).
-
-        Les dictionnaires de correspondance (RNX, types de milieux, etc.).
-
-        La logique de validation (mise en surbrillance rouge des champs obligatoires).
-
-        La gestion du défilement (optimisation de la molette de souris).
-
-    plugin_sites_cen_dialog_base.ui : Design de l'interface réalisé sous Qt Designer (XML + Styles CSS).
+=>  Structure des fichiers : Disponible dans le fichier "Architecture du plugin QGIS"
 
 
 =>  Prérequis sur les données (Couche SIG)
 
-  Pour fonctionner, la table contenue dans le GeoPackage doit impérativement s'appeler 'sites_cen'.
+  Pour fonctionner, les 2 tables SIG requises, dans le GeoPackage, doivent impérativement s'appeler 'sites_cen' et 'parcelles_cen'.
 
 
 =>  Maintenance et Évolutions :
@@ -51,4 +47,6 @@ Ce plugin permet la consultation et la mise à jour simplifiée des données att
 
 =>  Organisation : Conservatoire d'Espaces Naturels - Pays de la Loire
 
-=>  Version : 1.0 (2026)
+=> Compatibilité / prérequis techniques : 
+    - qgisMinimumVersion = 3.16
+    - qgisMaximumVersion = 4.99
