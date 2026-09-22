@@ -1,8 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
+  <!-- ==========================================================================
+       GESTIONNAIRE DES SITES CEN : interface du formulaire (Qt Designer / PyQt)
+
+       Classe : AttributeEditorSitesCENDialogBase (QDialog). Chargé par
+       plugin_sites_cen_dialog.py (uic.loadUiType) ; la logique est dans les
+       fichiers dialog_*_mixin.py.
+
+       PLAN DU FICHIER
+         0. Propriétés de la fenêtre et mise en page principale
+         1. Bandeau d'information en haut
+         2. Zone principale (splitter redimensionnable) en 2 colonnes :
+              2A. Colonne gauche : recherche, liste sites/parcelles, carte
+              2B. Colonne droite : bouton mode édition + pile de formulaires (formStack)
+                    page 0 = fiche du site (4 onglets)
+                    page 1 = fiche de la parcelle (11 groupes)
+                    page 2 = bilan foncier (ajoutée par le code Python, absente d'ici)
+         3. Barre de boutons du bas (Annuler / Appliquer / OK)
+
+       CONVENTIONS
+         - lbl_<widget> : libellé d'un champ. Il se termine par un ❓ dont l'infobulle
+           est définie dans dialog_data.py (dictionnaire HELP_TEXTS).
+         - Widget de saisie associé : txt... / cb... / spin... / date... Les champs
+           des sites sont nommés txtSite_<champ>, ceux des parcelles txtParc_<champ>.
+         - ✏️ devant un libellé = champ modifiable. Pour les sites, les champs sans ✏️
+           sont en lecture seule et sont masqués lorsque le mode édition est actif
+           (voir toggle_simple_view dans dialog_ui_mixin.py).
+
+       ATTENTION : ces commentaires sont supprimés si le fichier est ré-enregistré
+       depuis Qt Designer.
+       ========================================================================== -->
   <class>AttributeEditorSitesCENDialogBase</class>
   
   <widget class="QDialog" name="AttributeEditorSitesCENDialogBase">
+    <!-- Fenêtre : taille initiale 950 x 750 px, puis titre « Gestionnaire des sites CEN ». -->
     <property name="geometry">
       <rect>
         <x>0</x>
@@ -16,6 +47,11 @@
       <string>Gestionnaire des sites CEN</string>
     </property>
     
+    <!-- Feuille de style globale (QSS), héritée par tous les widgets de la fenêtre :
+         libellés et titres de groupes en gras (#2c3e50), infobulles jaunes, champs de
+         saisie à bordure grise arrondie, cadres de groupes arrondis, boutons gris clair,
+         poignée du splitter grise (bleue au survol), listes déroulantes à fond blanc.
+         Certains widgets redéfinissent localement leur propre style (ex. labelHeaderInfo). -->
     <property name="styleSheet">
       <string>
         QLabel, QGroupBox { font-weight: bold; color: #2c3e50; }
@@ -28,9 +64,18 @@
         QSplitter::handle { background-color: #dcdde1; border-left: 1px solid #bdc3c7; border-right: 1px solid #bdc3c7; }
         QSplitter::handle:horizontal { width: 10px; }
         QSplitter::handle:hover { background-color: #3498db; }
+        QComboBox QAbstractItemView {
+          background-color: white;
+          color: #2c3e50;
+          selection-background-color: white;
+          selection-color: #3498db;
+          outline: 0;
+        }
       </string>
     </property>
 
+    <!-- Mise en page principale : layout vertical (espacement et marges de 10 px) qui
+         empile, de haut en bas : bandeau d'information, splitter à 2 colonnes, boutons. -->
     <layout class="QVBoxLayout" name="mainVerticalLayout">
       <property name="spacing">
         <number>10</number>
@@ -48,299 +93,518 @@
         <number>10</number>
       </property>
 
+      <!-- ==========================================================================
+           1. BANDEAU D'INFORMATION (labelHeaderInfo)
+
+           Texte riche (HTML) : rappelle que la signification des champs s'affiche au
+           survol du ❓ et renvoie vers la notice / le dépôt GitHub (lien externe cliquable).
+           Hauteur limitée à 55 px, fond bleu clair, police 8 pt.
+           ========================================================================== -->
+      <item><widget class="QLabel" name="labelHeaderInfo"><property name="text"><string>Cet outil permet de faciliter la visualisation et la modification des informations foncières relatives aux sites du CEN Pays de la Loire ; la signification des champs est disponible en passant le curseur de la souris sur le ❓ à côté du nom du champ (pas besoin de cliquer dessus).&lt;br/&gt;La notice d'utilisation de l'outil est disponible dans le fichier ZIP &lt;b&gt;'plugin_sites_cen'&lt;/b&gt; ainsi qu'à l'adresse suivante : &lt;a href="https://github.com/matthieu-cen-paysdelaloire/plugin-sites-cen.git"&gt;https://github.com/matthieu-cen-paysdelaloire/plugin-sites-cen.git&lt;/a&gt;.</string></property><property name="textFormat"><enum>Qt::RichText</enum></property><property name="wordWrap"><bool>true</bool></property><property name="openExternalLinks"><bool>true</bool></property><property name="maximumHeight"><number>55</number></property><property name="styleSheet"><string>QLabel { font-weight: normal; font-size: 8pt; background-color: #eaf2f8; border: 1px solid #bdc3c7; border-radius: 6px; padding: 2px 6px; }</string></property></widget></item>
+      <!-- ==========================================================================
+           2. ZONE PRINCIPALE : splitter horizontal (splitter)
+
+           Deux panneaux côte à côte dont la largeur se règle à la souris (poignée
+           grise, bleue au survol) : leftContainer (2A) et rightContainer (2B).
+           ========================================================================== -->
       <item>
         <widget class="QSplitter" name="splitter">
           <property name="orientation">
             <enum>Qt::Horizontal</enum>
           </property>
           
+          <!-- ==========================================================================
+               2A. COLONNE GAUCHE (leftContainer) : navigation et localisation
+
+               De haut en bas : recherche + filtre, liste (sites OU parcelles),
+               bouton de bascule sites/parcelles, carte de localisation.
+               ========================================================================== -->
           <widget class="QWidget" name="leftContainer">
             <layout class="QVBoxLayout" name="leftSide">
+              <!-- ~~~~ Recherche et filtre ~~~~
+                   txtSearch : recherche texte ; cbFilterResponsable : filtre par responsable de
+                   site (alimenté par le code). Tous deux appellent filter_list() dans
+                   dialog_sites_mixin.py. -->
               <item>
-                <widget class="QLineEdit" name="txtSearch">
-                  <property name="placeholderText">
-                    <string>Filtrer les sites...</string>
-                  </property>
-                </widget>
+                <layout class="QHBoxLayout" name="searchFilterLayout">
+                  <item>
+                    <widget class="QLineEdit" name="txtSearch">
+                      <property name="placeholderText">
+                        <string>Filtrer les sites...</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QComboBox" name="cbFilterResponsable">
+                      <property name="toolTip">
+                        <string>Filtrer les sites par responsable de site</string>
+                      </property>
+                      <property name="minimumSize">
+                        <size><width>110</width><height>0</height></size>
+                      </property>
+                    </widget>
+                  </item>
+                </layout>
               </item>
+              <!-- ~~~~ Liste principale : leftListStack (QStackedWidget à 2 pages, hauteur max 280 px) ~~~~
+                   Page 0 = pageSites (sites), page 1 = pageParcelles (parcelles du site choisi).
+                   La page affichée change avec btnToggleParcelles ; formStack (colonne droite)
+                   bascule en même temps (voir dialog_parcelles_mixin.py). -->
               <item>
-                <widget class="QListWidget" name="listSites">
+                <widget class="QStackedWidget" name="leftListStack">
                   <property name="minimumSize">
                     <size>
                       <width>200</width>
                       <height>0</height>
                     </size>
                   </property>
+                  <property name="maximumSize">
+                    <size>
+                      <width>16777215</width>
+                      <height>280</height>
+                    </size>
+                  </property>
+                  <!-- Page 0 : listSites, la liste des sites (filtrée par la recherche et le
+                       responsable). Sélectionner un site charge ses attributs dans le formulaire de droite. -->
+                  <widget class="QWidget" name="pageSites">
+                    <layout class="QVBoxLayout" name="pageSitesLayout">
+                      <property name="leftMargin"><number>0</number></property>
+                      <property name="topMargin"><number>0</number></property>
+                      <property name="rightMargin"><number>0</number></property>
+                      <property name="bottomMargin"><number>0</number></property>
+                      <item>
+                        <widget class="QListWidget" name="listSites" />
+                      </item>
+                    </layout>
+                  </widget>
+                  <!-- Page 1 : parcelles du site sélectionné. labelParcellesContext (titre), puis deux
+                       listes côte à côte : listParcelles (N° de parcelle) et listParcellesProprietaires
+                       (propriétaires de la parcelle choisie). -->
+                  <widget class="QWidget" name="pageParcelles">
+                    <layout class="QVBoxLayout" name="pageParcellesLayout">
+                      <property name="leftMargin"><number>0</number></property>
+                      <property name="topMargin"><number>0</number></property>
+                      <property name="rightMargin"><number>0</number></property>
+                      <property name="bottomMargin"><number>0</number></property>
+                      <item>
+                        <widget class="QLabel" name="labelParcellesContext">
+                          <property name="text">
+                            <string>Parcelles du site :</string>
+                          </property>
+                          <property name="wordWrap"><bool>true</bool></property>
+                        </widget>
+                      </item>
+                      <item>
+                        <layout class="QHBoxLayout" name="parcellesListsLayout">
+                          <item>
+                            <layout class="QVBoxLayout" name="parcellesListNumLayout">
+                              <item>
+                                <widget class="QLabel" name="labelParcellesListNum">
+                                  <property name="text"><string>N° parcelle :</string></property>
+                                </widget>
+                              </item>
+                              <item>
+                                <widget class="QListWidget" name="listParcelles" />
+                              </item>
+                            </layout>
+                          </item>
+                          <item>
+                            <layout class="QVBoxLayout" name="parcellesListProprioLayout">
+                              <item>
+                                <widget class="QLabel" name="labelParcellesListProprio">
+                                  <property name="text"><string>Propriétaires :</string></property>
+                                </widget>
+                              </item>
+                              <item>
+                                <widget class="QListWidget" name="listParcellesProprietaires" />
+                              </item>
+                            </layout>
+                          </item>
+                        </layout>
+                      </item>
+                    </layout>
+                  </widget>
+                </widget>
+              </item>
+              <!-- ~~~~ Bouton de bascule Sites / Parcelles ~~~~
+                   Le texte alterne entre « Voir les parcelles du site » et « Retour aux sites ».
+                   Désactivé (enabled=false) tant que la couche des parcelles n'est pas chargée ;
+                   le code le réactive ensuite. Action : toggle_parcelles_view(). -->
+              <item>
+                <widget class="QPushButton" name="btnToggleParcelles">
+                  <property name="text">
+                    <string>Voir les parcelles du site</string>
+                  </property>
+                  <property name="enabled">
+                    <bool>false</bool>
+                  </property>
+                </widget>
+              </item>
+              <!-- ~~~~ Localisation (carte) ~~~~
+                   Libellé « Localisation : » puis le conteneur mapContainer. -->
+              <item>
+                <widget class="QLabel" name="label_map">
+                  <property name="text">
+                    <string>Localisation :</string>
+                  </property>
+                </widget>
+              </item>
+              <!-- mapContainer : conteneur volontairement vide (layout sans widget). Le code Python
+                   y insère le canevas cartographique QGIS (QgsMapCanvas, fond OpenStreetMap) :
+                   voir dialog_map_mixin.py. Taille minimale 200 x 220 px. -->
+              <item>
+                <widget class="QWidget" name="mapContainer" native="true">
+                  <property name="minimumSize">
+                    <size>
+                      <width>200</width>
+                      <height>220</height>
+                    </size>
+                  </property>
+                  <layout class="QVBoxLayout" name="mapContainerLayout">
+                    <property name="leftMargin"><number>0</number></property>
+                    <property name="topMargin"><number>0</number></property>
+                    <property name="rightMargin"><number>0</number></property>
+                    <property name="bottomMargin"><number>0</number></property>
+                  </layout>
                 </widget>
               </item>
             </layout>
           </widget>
 
-          <widget class="QScrollArea" name="scrollArea">
-            <property name="widgetResizable">
-              <bool>true</bool>
-            </property>
-            
-            <widget class="QWidget" name="scrollAreaWidgetContents">
-              <layout class="QVBoxLayout" name="formVLayout">
-                
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QHBoxLayout">
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_rnx">
-                              <property name="text"><string>Lien RNX :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QComboBox" name="cbLienRNX"/>
-                          </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_num">
-                              <property name="text"><string>Surface RNX (m²) :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QSpinBox" name="spinRNX">
-                              <property name="minimum"><number>-1</number></property>
-                              <property name="maximum"><number>99999999</number></property>
-                              <property name="specialValueText"><string>-- À renseigner --</string></property>
-                              <property name="suffix"><string> m²</string></property>
-                            </widget>
-                          </item>
-                        </layout>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
+          <!-- ==========================================================================
+               2B. COLONNE DROITE (rightContainer) : formulaire de saisie
 
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QVBoxLayout">
-                      <item>
-                        <widget class="QLabel" name="label_militaire">
-                          <property name="text"><string>Terrain militaire :</string></property>
-                        </widget>
-                      </item>
-                      <item>
-                        <widget class="QComboBox" name="cbMilitaire"/>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QHBoxLayout">
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_contrats">
-                              <property name="text"><string>Nb contrats :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QSpinBox" name="spinContrats">
-                              <property name="minimum"><number>-1</number></property>
-                              <property name="specialValueText"><string>-- À renseigner --</string></property>
-                            </widget>
-                          </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_agri">
-                              <property name="text"><string>Nb agriculteurs :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QSpinBox" name="spinAgri">
-                              <property name="minimum"><number>-1</number></property>
-                              <property name="specialValueText"><string>-- À renseigner --</string></property>
-                            </widget>
-                          </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_surf_contrat">
-                              <property name="text"><string>Surf. contrat :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QSpinBox" name="spinSurfContrat">
-                              <property name="minimum"><number>-1</number></property>
-                              <property name="maximum"><number>99999999</number></property>
-                              <property name="specialValueText"><string>-- À renseigner --</string></property>
-                              <property name="suffix"><string> m²</string></property>
-                            </widget>
-                          </item>
-                        </layout>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QVBoxLayout">
-                      <item>
-                        <widget class="QLabel" name="label_type_milieu">
-                          <property name="text"><string>Type de milieu :</string></property>
-                        </widget>
-                      </item>
-                      <item>
-                        <widget class="QComboBox" name="cbType_milieu"/>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QHBoxLayout">
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_nature">
-                              <property name="text"><string>Nature site INPN :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QComboBox" name="cbNatureInpn"/>
-                          </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_geol">
-                              <property name="text"><string>Géol. site INPN :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QComboBox" name="cbGeolInpn"/>
-                          </item>
-                        </layout>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QGroupBox" name="groupGeolDecision">
-                    <property name="title">
-                      <string>Code Géologique :</string>
+               De haut en bas : bouton du mode édition, puis pile de formulaires (formStack).
+               Au lancement, plugin_sites_cen_dialog.py place btnToggleSimpleView sur une même
+               ligne que le bouton « Bilan foncier » et ajoute le lien « Comment ça marche ? » :
+               ces deux éléments n'existent donc pas dans ce fichier .ui.
+               ========================================================================== -->
+          <widget class="QWidget" name="rightContainer">
+            <layout class="QVBoxLayout" name="rightContainerLayout">
+              <property name="leftMargin"><number>0</number></property>
+              <property name="topMargin"><number>0</number></property>
+              <property name="rightMargin"><number>0</number></property>
+              <property name="bottomMargin"><number>0</number></property>
+              <!-- Bouton à bascule « ✏️ Activer le mode édition » (checkable). Par défaut le
+                   formulaire est en consultation ; l'activer déverrouille les champs ✏️ et masque
+                   les champs en lecture seule. Le texte devient « Revenir à la consultation ».
+                   Action : toggle_simple_view(). -->
+              <item>
+                <widget class="QPushButton" name="btnToggleSimpleView">
+                  <property name="text"><string>✏️ Activer le mode édition</string></property>
+                  <property name="checkable"><bool>true</bool></property>
+                </widget>
+              </item>
+              <!-- ~~~~ Pile de formulaires : formStack (QStackedWidget) ~~~~
+                   Index 0 = fiche du site (siteTabWidget, 4 onglets).
+                   Index 1 = fiche de la parcelle (parcelleScrollArea, lecture seule).
+                   Index 2 = panneau « Bilan foncier », ajouté en Python par setup_bilan_panel(). -->
+              <item>
+                <widget class="QStackedWidget" name="formStack">
+                <!-- ~~~~ PAGE 0 : FICHE DU SITE (siteTabWidget, 4 onglets) ~~~~
+                     Chaque onglet contient une QScrollArea (siteTab_N_scroll) pour défiler quand le
+                     contenu dépasse. Chaque champ = deux éléments consécutifs : un QLabel (lbl_...)
+                     puis son widget de saisie. -->
+                <widget class="QTabWidget" name="siteTabWidget">
+                  <!-- ~~~~ ONGLET 1 : « Identification du site » (siteTab_0) ~~~~
+                       Nom, numéro, description ✏️, code département, ID site CEN, code comptable,
+                       URL photo ✏️, URL CEN ✏️, lien vers les actes. Seuls les 3 champs ✏️ sont
+                       modifiables ; les autres sont en lecture seule. -->
+                  <widget class="QWidget" name="siteTab_0"><attribute name="title"><string>Identification du site</string></attribute><layout class="QVBoxLayout" name="siteTab_0_layout"><property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property><item><widget class="QScrollArea" name="siteTab_0_scroll"><property name="widgetResizable"><bool>true</bool></property><widget class="QWidget" name="siteTab_0_scrollContents"><layout class="QVBoxLayout" name="siteTab_0_innerLayout"><property name="leftMargin"><number>10</number></property><property name="topMargin"><number>10</number></property><property name="rightMargin"><number>10</number></property><item>
+                          <widget class="QLabel" name="lbl_txtSite_nom_site">
+                            <property name="text"><string>Nom du site : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_nom_site">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_num_site">
+                            <property name="text"><string>N° site : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_num_site">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                  <widget class="QLabel" name="label_desc">
+                    <property name="text"><string>✏️ Description : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                  <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                </item><item>
+                  <widget class="QTextEdit" name="txtDescription">
+                    <property name="minimumSize">
+                      <size><width>0</width><height>80</height></size>
                     </property>
-                    <layout class="QGridLayout">
-                      <item row="0" column="0">
-                        <widget class="QLabel" name="lblGeol1">
-                          <property name="text"><string>1ère branche :</string></property>
-                        </widget>
-                      </item>
-                      <item row="1" column="0">
-                        <widget class="QComboBox" name="cbGeolStep1"/>
-                      </item>
-                      <item row="0" column="1">
-                        <widget class="QLabel" name="lblGeol2">
-                          <property name="text"><string>2nde branche :</string></property>
-                        </widget>
-                      </item>
-                      <item row="1" column="1">
-                        <widget class="QComboBox" name="cbGeolStep2"/>
-                      </item>
-                      <item row="2" column="0">
-                        <widget class="QLabel" name="lblGeol3">
-                          <property name="text"><string>3ème branche :</string></property>
-                        </widget>
-                      </item>
-                      <item row="3" column="0">
-                        <widget class="QComboBox" name="cbGeolStep3"/>
-                      </item>
-                      <item row="2" column="1">
-                        <widget class="QLabel" name="lblGeol4">
-                          <property name="text"><string>4ème branche :</string></property>
-                        </widget>
-                      </item>
-                      <item row="3" column="1">
-                        <widget class="QComboBox" name="cbGeolStep4"/>
-                      </item>
-                      <item row="4" column="0" colspan="2">
-                        <widget class="QLabel" name="lblGeolFinal">
-                          <property name="text"><string>Code final :</string></property>
-                        </widget>
-                      </item>
-                      <item row="5" column="0" colspan="2">
-                        <widget class="QLineEdit" name="txtGeolResult">
-                          <property name="readOnly"><bool>true</bool></property>
-                        </widget>
-                      </item>
-                    </layout>
+                    <property name="placeholderText"><string>-- À renseigner --</string></property>
                   </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QHBoxLayout">
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
+                </item><item>
+                          <widget class="QLabel" name="lbl_txtSite_code_departement">
+                            <property name="text"><string>Code département : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_code_departement">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_id_site_cen">
+                            <property name="text"><string>ID site (CEN) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_id_site_cen">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_code_compta">
+                            <property name="text"><string>Code comptable : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_code_compta">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                  <widget class="QLabel" name="label_url_photo">
+                    <property name="text"><string>✏️ URL Photo : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                  <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                </item><item>
+                  <widget class="QLineEdit" name="txtUrlPhoto">
+                    <property name="placeholderText"><string>-- À renseigner --</string></property>
+                  </widget>
+                </item><item>
+                      <widget class="QLabel" name="label_url_cen">
+                        <property name="text"><string>✏️ URL CEN : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtUrlCen">
+                        <property name="placeholderText"><string>-- À renseigner --</string></property>
+                      </widget>
+                    </item>
+                  <item>
+                          <widget class="QLabel" name="lbl_txtSite_lien_vers_actes">
+                            <property name="text"><string>Lien vers actes : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_lien_vers_actes">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item><spacer name="siteTab_0_spacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item></layout></widget></widget></item></layout></widget>
+                        <!-- ~~~~ ONGLET 2 : « Gestion et responsabilité » (siteTab_1) ~~~~
+                             Champs ✏️ : responsable de site, cartographie et typologie des habitats,
+                             gestionnaire. Puis groupes « Agricole » et « Évaluation du document de gestion »,
+                             puis (lecture seule) document justificatif administratif, surface en libre
+                             évolution ✏️ et surfaces (habitats cartographiés, SIG, sylvicole). -->
+                        <widget class="QWidget" name="siteTab_1"><attribute name="title"><string>Gestion et responsabilité</string></attribute><layout class="QVBoxLayout" name="siteTab_1_layout"><property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property><item><widget class="QScrollArea" name="siteTab_1_scroll"><property name="widgetResizable"><bool>true</bool></property><widget class="QWidget" name="siteTab_1_scrollContents"><layout class="QVBoxLayout" name="siteTab_1_innerLayout"><property name="leftMargin"><number>10</number></property><property name="topMargin"><number>10</number></property><property name="rightMargin"><number>10</number></property><item>
+                          <widget class="QLabel" name="lbl_txtSite_responsable_de_site">
+                            <property name="text"><string>✏️ Responsable de site : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_responsable_de_site">
+                            <property name="placeholderText"><string>-- À renseigner --</string></property></widget>
+                        </item>
+                        <item>
                             <widget class="QLabel" name="label_carto_hab">
-                              <property name="text"><string>Carto. habitats :</string></property>
-                            </widget>
+                              <property name="text"><string>✏️ Carto. habitats : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
                           </item>
                           <item>
-                            <widget class="QComboBox" name="cbCartoHab"/>
+                            <widget class="QComboBox" name="cbCartoHab" />
                           </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
+                        <item>
                             <widget class="QLabel" name="label_typo_hab">
-                              <property name="text"><string>Typo. carto :</string></property>
-                            </widget>
+                              <property name="text"><string>✏️ Typo. carto : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
                           </item>
                           <item>
-                            <widget class="QComboBox" name="cbTypoHab"/>
+                            <widget class="QComboBox" name="cbTypoHab" />
                           </item>
-                        </layout>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QHBoxLayout">
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
+                        <item>
                             <widget class="QLabel" name="label_gestionnaire">
-                              <property name="text"><string>Gestionnaire :</string></property>
-                            </widget>
+                              <property name="text"><string>✏️ Gestionnaire : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
                           </item>
                           <item>
                             <widget class="QLineEdit" name="txtGestionnaire">
                               <property name="placeholderText"><string>-- À renseigner --</string></property>
                             </widget>
                           </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
+                          <!-- Groupe « Agricole » : nombre de contrats, nombre d'agriculteurs, surface sous
+                               contrat (3 champs numériques, tous modifiables ✏️). -->
                           <item>
-                            <widget class="QLabel" name="label_surf_libre">
-                              <property name="text"><string>Surf. libre évolution :</string></property>
+                            <widget class="QGroupBox" name="groupAgricole">
+                              <property name="title"><string>Agricole</string></property>
+                              <layout class="QVBoxLayout" name="groupAgricole_layout">
+                                <item>
+                                  <widget class="QLabel" name="label_contrats">
+                                    <property name="text"><string>✏️ Nb contrats : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                                    <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                                </item>
+                                <item>
+                                  <widget class="QSpinBox" name="spinContrats">
+                                    <property name="minimum"><number>-1</number></property>
+                                    <property name="specialValueText"><string>-- À renseigner --</string></property>
+                                  </widget>
+                                </item>
+                                <item>
+                                  <widget class="QLabel" name="label_agri">
+                                    <property name="text"><string>✏️ Nb agriculteurs : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                                    <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                                </item>
+                                <item>
+                                  <widget class="QSpinBox" name="spinAgri">
+                                    <property name="minimum"><number>-1</number></property>
+                                    <property name="specialValueText"><string>-- À renseigner --</string></property>
+                                  </widget>
+                                </item>
+                                <item>
+                                  <widget class="QLabel" name="label_surf_contrat">
+                                    <property name="text"><string>✏️ Surface contrat : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                                    <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                                </item>
+                                <item>
+                                  <widget class="QSpinBox" name="spinSurfContrat">
+                                    <property name="minimum"><number>-1</number></property>
+                                    <property name="maximum"><number>99999999</number></property>
+                                    <property name="specialValueText"><string>-- À renseigner --</string></property>
+                                    <property name="suffix"><string> m²</string></property>
+                                  </widget>
+                                </item>
+                              </layout>
                             </widget>
+                          </item>
+                        <!-- Groupe « Évaluation du document de gestion » (champs modifiables ✏️) : présence,
+                             nom, évaluation et surface du document, puis 3 dates (initiale, mise à jour, fin).
+                             Chaque QDateEdit est doublé d'une case « Pas de date à renseigner » (chkDate...Null)
+                             qui laisse la date non renseignée et grise le champ date associé. -->
+                        <item>
+                          <widget class="QGroupBox" name="groupEvaluationDoc">
+                            <property name="title"><string>Évaluation du document de gestion</string></property>
+                            <layout class="QVBoxLayout" name="groupEvaluationDoc_layout">
+                              <item>
+                            <widget class="QLabel" name="label_doc_pres">
+                              <property name="text"><string>✏️ Présence Doc Gestion : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                          </item>
+                          <item>
+                            <widget class="QComboBox" name="cbDocPres" />
+                          </item>
+                              <item>
+                            <widget class="QLabel" name="label_doc_nom">
+                              <property name="text"><string>✏️ Nom du document : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                          </item>
+                          <item>
+                            <widget class="QLineEdit" name="txtDocNom">
+                              <property name="placeholderText"><string>-- À renseigner --</string></property>
+                            </widget>
+                          </item>
+                        <item>
+                                <widget class="QLabel" name="label_doc_eval">
+                                  <property name="text"><string>✏️ Évaluation Doc : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                                <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                              </item>
+                              <item>
+                                <widget class="QComboBox" name="cbDocEval" />
+                              </item>
+                              <item>
+                                <widget class="QLabel" name="label_surf_doc">
+                                  <property name="text"><string>✏️ Surface Doc Gestion : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                                <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                              </item>
+                              <item>
+                                <widget class="QSpinBox" name="spinSurfDoc">
+                                  <property name="minimum"><number>-1</number></property>
+                                  <property name="maximum"><number>99999999</number></property>
+                                  <property name="specialValueText"><string>-- À renseigner --</string></property>
+                                  <property name="suffix"><string> m²</string></property>
+                                </widget>
+                              </item>
+                              <item>
+                                <widget class="QLabel" name="label_date_ini">
+                                  <property name="text"><string>✏️ Date initiale : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                                <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                              </item>
+                              <item>
+                                <layout class="QHBoxLayout" name="rowDateIniLayout">
+                                  <item>
+                                    <widget class="QDateEdit" name="dateIni">
+                                      <property name="calendarPopup"><bool>true</bool></property>
+                                    </widget>
+                                  </item>
+                                  <item>
+                                    <widget class="QCheckBox" name="chkDateIniNull">
+                                      <property name="text"><string>Pas de date à renseigner</string></property>
+                                    </widget>
+                                  </item>
+                                </layout>
+                              </item>
+                              <item>
+                                <widget class="QLabel" name="label_date_maj">
+                                  <property name="text"><string>✏️ Date MàJ : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                                <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                              </item>
+                              <item>
+                                <layout class="QHBoxLayout" name="rowDateMajLayout">
+                                  <item>
+                                    <widget class="QDateEdit" name="dateMaj">
+                                      <property name="calendarPopup"><bool>true</bool></property>
+                                    </widget>
+                                  </item>
+                                  <item>
+                                    <widget class="QCheckBox" name="chkDateMajNull">
+                                      <property name="text"><string>Pas de date à renseigner</string></property>
+                                    </widget>
+                                  </item>
+                                </layout>
+                              </item>
+                              <item>
+                                <widget class="QLabel" name="label_date_fin">
+                                  <property name="text"><string>✏️ Date fin : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                                <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                              </item>
+                              <item>
+                                <layout class="QHBoxLayout" name="rowDateFinLayout">
+                                  <item>
+                                    <widget class="QDateEdit" name="dateFin">
+                                      <property name="calendarPopup"><bool>true</bool></property>
+                                    </widget>
+                                  </item>
+                                  <item>
+                                    <widget class="QCheckBox" name="chkDateFinNull">
+                                      <property name="text"><string>Pas de date à renseigner</string></property>
+                                    </widget>
+                                  </item>
+                                </layout>
+                              </item>
+                            </layout>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_doc_justif_admin">
+                            <property name="text"><string>Document justificatif administratif : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_doc_justif_admin">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                            <widget class="QLabel" name="label_surf_libre">
+                              <property name="text"><string>✏️ Surface libre évolution : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
                           </item>
                           <item>
                             <widget class="QSpinBox" name="spinLibreEvo">
@@ -350,248 +614,1011 @@
                               <property name="suffix"><string> m²</string></property>
                             </widget>
                           </item>
-                        </layout>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QHBoxLayout">
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_doc_pres">
-                              <property name="text"><string>Présence Doc Gestion :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QComboBox" name="cbDocPres"/>
-                          </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_doc_nom">
-                              <property name="text"><string>Nom du document :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QLineEdit" name="txtDocNom">
-                              <property name="placeholderText"><string>-- À renseigner --</string></property>
-                            </widget>
-                          </item>
-                        </layout>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QVBoxLayout">
-                      <item>
-                        <widget class="QLabel" name="label_doc_eval">
-                          <property name="text"><string>Évaluation Doc :</string></property>
-                        </widget>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_surf_carto_habitat_m2">
+                            <property name="text"><string>Surface cartographiée habitats (m²) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_surf_carto_habitat_m2">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_surf_sig_ha">
+                            <property name="text"><string>Surface SIG (ha) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_surf_sig_ha">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_surf_sylvae_m2">
+                            <property name="text"><string>Surface sylvicole (m²) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_surf_sylvae_m2">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item><spacer name="siteTab_1_spacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item></layout></widget></widget></item></layout></widget>
+                        <!-- ~~~~ ONGLET 3 : « Statut et classification » (siteTab_2) ~~~~
+                             Type de milieu ✏️ et terrain militaire ✏️, puis les groupes ZPF, RNX (suivi du
+                             champ « Prix », lecture seule), INPN, Code géologique, Caractère sensible du site,
+                             Littoral et Natura 2000. -->
+                        <widget class="QWidget" name="siteTab_2"><attribute name="title"><string>Statut et classification</string></attribute><layout class="QVBoxLayout" name="siteTab_2_layout"><property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property><item><widget class="QScrollArea" name="siteTab_2_scroll"><property name="widgetResizable"><bool>true</bool></property><widget class="QWidget" name="siteTab_2_scrollContents"><layout class="QVBoxLayout" name="siteTab_2_innerLayout"><property name="leftMargin"><number>10</number></property><property name="topMargin"><number>10</number></property><property name="rightMargin"><number>10</number></property><item>
+                        <widget class="QLabel" name="label_type_milieu">
+                          <property name="text"><string>✏️ Type de milieu : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                        <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
                       </item>
                       <item>
-                        <widget class="QComboBox" name="cbDocEval"/>
+                        <widget class="QComboBox" name="cbType_milieu" />
                       </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QHBoxLayout">
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_date_ini">
-                              <property name="text"><string>Date initiale :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QDateEdit" name="dateIni">
-                              <property name="calendarPopup"><bool>true</bool></property>
-                            </widget>
-                          </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_date_maj">
-                              <property name="text"><string>Date MàJ :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QDateEdit" name="dateMaj">
-                              <property name="calendarPopup"><bool>true</bool></property>
-                            </widget>
-                          </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
-                            <widget class="QLabel" name="label_date_fin">
-                              <property name="text"><string>Date fin :</string></property>
-                            </widget>
-                          </item>
-                          <item>
-                            <widget class="QDateEdit" name="dateFin">
-                              <property name="calendarPopup"><bool>true</bool></property>
-                            </widget>
-                          </item>
-                        </layout>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QVBoxLayout">
-                      <item>
-                        <widget class="QLabel" name="label_surf_doc">
-                          <property name="text"><string>Surf. Doc Gestion :</string></property>
-                        </widget>
-                      </item>
-                      <item>
-                        <widget class="QSpinBox" name="spinSurfDoc">
-                          <property name="minimum"><number>-1</number></property>
-                          <property name="maximum"><number>99999999</number></property>
-                          <property name="specialValueText"><string>-- À renseigner --</string></property>
-                          <property name="suffix"><string> m²</string></property>
-                        </widget>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
-                  <layout class="QVBoxLayout">
                     <item>
+                        <widget class="QLabel" name="label_militaire">
+                          <property name="text"><string>✏️ Terrain militaire : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                        <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                      </item>
+                      <item>
+                        <widget class="QComboBox" name="cbMilitaire" />
+                      </item>
+                    <!-- Groupe « ZPF » : ZPF, mode, surface et date (4 champs en lecture seule). -->
+                    <item><widget class="QGroupBox" name="groupZPF"><property name="title"><string>ZPF</string></property><layout class="QVBoxLayout" name="groupZPF_layout"><item>
+                          <widget class="QLabel" name="lbl_txtSite_ZPF">
+                            <property name="text"><string>ZPF : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_ZPF">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_mode_ZPF">
+                            <property name="text"><string>Mode ZPF : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_mode_ZPF">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_surface_ZPF">
+                            <property name="text"><string>Surface ZPF : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_surface_ZPF">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_date_ZPF">
+                            <property name="text"><string>Date ZPF : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_date_ZPF">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        </layout></widget></item>
+                        <!-- Groupe « RNX » : lien RNX ✏️ (liste), ID RNX INPN (lecture seule), surface RNX en
+                             m² ✏️. Le champ « Prix » (lecture seule) vient juste après, hors du groupe. -->
+                        <item><widget class="QGroupBox" name="groupRNX"><property name="title"><string>RNX</string></property><layout class="QVBoxLayout" name="groupRNX_layout"><item>
+                            <widget class="QLabel" name="label_rnx">
+                              <property name="text"><string>✏️ Lien RNX : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                          </item>
+                          <item>
+                            <widget class="QComboBox" name="cbLienRNX" />
+                          </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_id_rnx_inpn">
+                            <property name="text"><string>ID RNX (INPN) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_id_rnx_inpn">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                            <widget class="QLabel" name="label_num">
+                              <property name="text"><string>✏️ Surface RNX (m²) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                          </item>
+                          <item>
+                            <widget class="QSpinBox" name="spinRNX">
+                              <property name="minimum"><number>-1</number></property>
+                              <property name="maximum"><number>99999999</number></property>
+                              <property name="specialValueText"><string>-- À renseigner --</string></property>
+                              <property name="suffix"><string> m²</string></property>
+                            </widget>
+                          </item>
+                        </layout></widget></item><item>
+                          <widget class="QLabel" name="lbl_txtSite_prix">
+                            <property name="text"><string>Prix : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_prix">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <!-- Groupe « INPN » : URL INPN ✏️, ID site INPN (lecture seule), nature du site
+                             INPN ✏️ et géologie du site INPN ✏️ (listes déroulantes). -->
+                        <item><widget class="QGroupBox" name="groupINPN"><property name="title"><string>INPN</string></property><layout class="QVBoxLayout" name="groupINPN_layout"><item>
                       <widget class="QLabel" name="label_url_inpn">
-                        <property name="text"><string>URL INPN :</string></property>
-                      </widget>
+                        <property name="text"><string>✏️ URL INPN : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
                     </item>
                     <item>
                       <widget class="QLineEdit" name="txtUrlInpn">
                         <property name="placeholderText"><string>-- À renseigner --</string></property>
                       </widget>
                     </item>
-                  </layout>
-                </item>
-
-                <item>
-                  <layout class="QVBoxLayout">
-                    <item>
-                      <widget class="QLabel" name="label_url_cen">
-                        <property name="text"><string>URL CEN :</string></property>
-                      </widget>
-                    </item>
-                    <item>
-                      <widget class="QLineEdit" name="txtUrlCen">
-                        <property name="placeholderText"><string>-- À renseigner --</string></property>
-                      </widget>
-                    </item>
-                  </layout>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
+                  <item>
+                          <widget class="QLabel" name="lbl_txtSite_id_site_inpn">
+                            <property name="text"><string>ID site (INPN) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_id_site_inpn">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                            <widget class="QLabel" name="label_nature">
+                              <property name="text"><string>✏️ Nature site INPN : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                          </item>
+                          <item>
+                            <widget class="QComboBox" name="cbNatureInpn" />
+                          </item>
+                        <item>
+                            <widget class="QLabel" name="label_geol">
+                              <property name="text"><string>✏️ Géol. site INPN : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                          </item>
+                          <item>
+                            <widget class="QComboBox" name="cbGeolInpn" />
+                          </item>
+                        </layout></widget></item>
+                        <!-- Groupe « ✏️ Code Géologique » : 4 listes déroulantes en cascade (cbGeolStep1 à
+                             cbGeolStep4) ; le choix d'une branche alimente la suivante (update_geol_cascade,
+                             dialog_geology_mixin.py ; arbre DICT_GEOL_STEP dans dialog_data.py). « Code final »
+                             (txtGeolResult) est calculé automatiquement, donc toujours en lecture seule.
+                             Le ❓ (lblGeol1Help) utilise une infobulle Qt native (setToolTip), contrairement
+                             aux autres champs qui passent par le survol du lien HTML. -->
+                        <item>
+                  <widget class="QGroupBox" name="groupGeolDecision">
+                    <property name="title">
+                      <string>✏️ Code Géologique :</string>
+                    </property>
                     <layout class="QVBoxLayout">
                       <item>
-                        <widget class="QLabel" name="label_ouverture">
-                          <property name="text"><string>Ouverture au public :</string></property>
+                        <layout class="QHBoxLayout" name="rowGeol1Layout">
+                          <item>
+                            <widget class="QLabel" name="lblGeol1">
+                              <property name="text"><string>1ère branche :</string></property>
+                            </widget>
+                          </item>
+                          <item>
+                            <widget class="QLabel" name="lblGeol1Help">
+                              <property name="text"><string>❓</string></property>
+                            </widget>
+                          </item>
+                          <item>
+                            <spacer name="rowGeol1Spacer">
+                              <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                              <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+                            </spacer>
+                          </item>
+                        </layout>
+                      </item>
+                      <item>
+                        <widget class="QComboBox" name="cbGeolStep1" />
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="lblGeol2">
+                          <property name="text"><string>2nde branche :</string></property>
                         </widget>
                       </item>
                       <item>
-                        <widget class="QComboBox" name="cbOuverture"/>
+                        <widget class="QComboBox" name="cbGeolStep2" />
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="lblGeol3">
+                          <property name="text"><string>3ème branche :</string></property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QComboBox" name="cbGeolStep3" />
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="lblGeol4">
+                          <property name="text"><string>4ème branche :</string></property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QComboBox" name="cbGeolStep4" />
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="lblGeolFinal">
+                          <property name="text"><string>Code final :</string></property>
+                          <property name="visible"><bool>false</bool></property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QLineEdit" name="txtGeolResult">
+                          <property name="readOnly"><bool>true</bool></property>
+                          <property name="visible"><bool>false</bool></property>
+                        </widget>
                       </item>
                     </layout>
                   </widget>
                 </item>
-
+                <!-- Groupe « Caractère sensible du site » : ouverture au public ✏️, sensibilité ✏️,
+                     non-diffusion ✏️, remarque sur la sensibilité ✏️ (zone de texte), puis ENS,
+                     site classé et site CEN communicable (lecture seule). -->
                 <item>
-                  <widget class="QLabel" name="label_desc">
-                    <property name="text"><string>Description :</string></property>
-                  </widget>
-                </item>
-                <item>
-                  <widget class="QTextEdit" name="txtDescription">
-                    <property name="minimumSize">
-                      <size><width>0</width><height>80</height></size>
-                    </property>
-                    <property name="placeholderText"><string>-- À renseigner --</string></property>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QLabel" name="label_url_photo">
-                    <property name="text"><string>URL Photo :</string></property>
-                  </widget>
-                </item>
-                <item>
-                  <widget class="QLineEdit" name="txtUrlPhoto">
-                    <property name="placeholderText"><string>-- À renseigner --</string></property>
-                  </widget>
-                </item>
-
-                <item>
-                  <widget class="QFrame" name="rowBlock">
-                    <layout class="QHBoxLayout">
+                          <widget class="QGroupBox" name="groupSensibilite">
+                            <property name="title"><string>Caractère sensible du site</string></property>
+                            <layout class="QVBoxLayout" name="groupSensibilite_layout">
+<item>
+                        <widget class="QLabel" name="label_ouverture">
+                          <property name="text"><string>✏️ Ouverture au public : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                        <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                      </item>
                       <item>
-                        <layout class="QVBoxLayout">
-                          <item>
+                        <widget class="QComboBox" name="cbOuverture" />
+                      </item>
+                    <item>
                             <widget class="QLabel" name="label_sensi">
-                              <property name="text"><string>Sensibilité :</string></property>
-                            </widget>
+                              <property name="text"><string>✏️ Sensibilité : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
                           </item>
                           <item>
-                            <widget class="QComboBox" name="cbSensibilite"/>
+                            <widget class="QComboBox" name="cbSensibilite" />
                           </item>
-                        </layout>
-                      </item>
-                      <item>
-                        <layout class="QVBoxLayout">
-                          <item>
+                        <item>
                             <widget class="QLabel" name="label_diffusion">
-                              <property name="text"><string>Non diffusion :</string></property>
-                            </widget>
+                              <property name="text"><string>✏️ Non diffusion : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                            <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
                           </item>
                           <item>
-                            <widget class="QComboBox" name="cbNonDiffusion"/>
+                            <widget class="QComboBox" name="cbNonDiffusion" />
                           </item>
-                        </layout>
-                      </item>
-                    </layout>
-                  </widget>
-                </item>
-
-                <item>
+                        <item>
                   <widget class="QLabel" name="label_remq_sensi">
-                    <property name="text"><string>Remarque sensibilité :</string></property>
-                  </widget>
-                </item>
-                <item>
+                    <property name="text"><string>✏️ Remarque sensibilité : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                  <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                </item><item>
                   <widget class="QTextEdit" name="txtRemqSensibilite">
                     <property name="minimumSize">
                       <size><width>0</width><height>60</height></size>
                     </property>
                     <property name="placeholderText"><string>-- À renseigner --</string></property>
                   </widget>
-                </item>
+                </item><item>
+                          <widget class="QLabel" name="lbl_txtSite_ens">
+                            <property name="text"><string>ENS : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_ens">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_site_classe">
+                            <property name="text"><string>Site classé : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_site_classe">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_site_cen_communicable">
+                            <property name="text"><string>Site CEN communicable : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_site_cen_communicable">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                                                    </layout>
+                          </widget>
+                        </item>
+<!-- Groupe « Littoral » : site CDL et site marin (lecture seule). -->
+<item>
+                          <widget class="QGroupBox" name="groupLittoral">
+                            <property name="title"><string>Littoral</string></property>
+                            <layout class="QVBoxLayout" name="groupLittoral_layout">
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_site_cdl">
+                            <property name="text"><string>Site CDL : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_site_cdl">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_site_marin">
+                            <property name="text"><string>Site marin : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_site_marin">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                            </layout>
+                          </widget>
+                        </item>
+<!-- Groupe « Natura 2000 » : directive et surface en m² (lecture seule). -->
+<item>
+                          <widget class="QGroupBox" name="groupNatura2000">
+                            <property name="title"><string>Natura 2000</string></property>
+                            <layout class="QVBoxLayout" name="groupNatura2000_layout">
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_n2000_directive">
+                            <property name="text"><string>Directive Natura 2000 : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_n2000_directive">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_n2000_surface_m2">
+                            <property name="text"><string>Surface Natura 2000 (m²) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_n2000_surface_m2">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                            </layout>
+                          </widget>
+                        </item>
+                        <item><spacer name="siteTab_2_spacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item></layout></widget></widget></item></layout></widget>
+                        <!-- ~~~~ ONGLET 4 : « Historique et qualité de la donnée » (siteTab_3) ~~~~
+                             Suivi de la donnée : dates de création et de mise à jour, nature du périmètre,
+                             source et date de la géométrie, échelle et précision de numérisation, opérateur.
+                             Aucun champ ✏️ : onglet de consultation uniquement. -->
+                        <widget class="QWidget" name="siteTab_3"><attribute name="title"><string>Historique et qualité de la donnée</string></attribute><layout class="QVBoxLayout" name="siteTab_3_layout"><property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property><item><widget class="QScrollArea" name="siteTab_3_scroll"><property name="widgetResizable"><bool>true</bool></property><widget class="QWidget" name="siteTab_3_scrollContents"><layout class="QVBoxLayout" name="siteTab_3_innerLayout"><property name="leftMargin"><number>10</number></property><property name="topMargin"><number>10</number></property><property name="rightMargin"><number>10</number></property><item>
+                          <widget class="QLabel" name="lbl_txtSite_date_crea_site">
+                            <property name="text"><string>Date création site : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_date_crea_site">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_date_maj_site">
+                            <property name="text"><string>Date MàJ site : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_date_maj_site">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_date_maj_s">
+                            <property name="text"><string>Date MàJ (s) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_date_maj_s">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_nature_perimetre">
+                            <property name="text"><string>Nature du périmètre : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_nature_perimetre">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_source_geom_site_nature">
+                            <property name="text"><string>Source géométrie (nature) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_source_geom_site_nature">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_source_geom_site_date">
+                            <property name="text"><string>Source géométrie (date) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_source_geom_site_date">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_echelle_num_site">
+                            <property name="text"><string>Échelle de numérisation : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_echelle_num_site">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_precision_num_site">
+                            <property name="text"><string>Précision de numérisation : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_precision_num_site">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="lbl_txtSite_operateur">
+                            <property name="text"><string>Opérateur : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                        </item>
+                        <item>
+                          <widget class="QLineEdit" name="txtSite_operateur">
+                            <property name="readOnly"><bool>true</bool></property>
+                          </widget>
+                        </item>
+                        <item><spacer name="siteTab_3_spacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item></layout></widget></widget></item></layout></widget></widget>
+          <!-- ==========================================================================
+               PAGE 1 : FICHE DE LA PARCELLE (parcelleScrollArea, QScrollArea)
 
-              </layout>
-            </widget>
-          </widget> </widget> </item>
+               Affichée via le bouton « Voir les parcelles du site ». Tous les champs
+               (txtParc_<champ>) sont en lecture seule. 11 groupes, dans l'ordre :
+               Identification, Site rattaché, Localisation administrative, Surfaces,
+               Occupation et gestion, Qualité de la donnée, Foncier et propriété,
+               ORE et compensation, ZPF, Transactions / SAFER, Remarques.
+               ========================================================================== -->
+          <widget class="QScrollArea" name="parcelleScrollArea"><property name="widgetResizable"><bool>true</bool></property><widget class="QWidget" name="parcelleScrollAreaWidgetContents"><layout class="QVBoxLayout" name="parcelleDetailLayout"><property name="leftMargin"><number>10</number></property><property name="topMargin"><number>10</number></property><property name="rightMargin"><number>10</number></property><property name="spacing"><number>18</number></property>
+          <!-- Groupe « Identification » : identifiant cadastral (préfixe, section, N° de parcelle). -->
+          <item><widget class="QGroupBox" name="groupParcelleDetail"><property name="title"><string>Identification</string></property><layout class="QVBoxLayout" name="groupParcelleDetail_layout"><item>
+                        <widget class="QLabel" name="label_parc_prefixe">
+                          <property name="text"><string>Préfixe : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property>
+                          <property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QLineEdit" name="txtParcNumPrefixe">
+                          <property name="readOnly"><bool>true</bool></property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="label_parc_section">
+                          <property name="text"><string>Section : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property>
+                          <property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QLineEdit" name="txtParcNumSection">
+                          <property name="readOnly"><bool>true</bool></property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="label_parc_numseul">
+                          <property name="text"><string>N° parcelle : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                          <property name="textFormat"><enum>Qt::RichText</enum></property>
+                          <property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QLineEdit" name="txtParcNumParcSeul">
+                          <property name="readOnly"><bool>true</bool></property>
+                        </widget>
+                      </item>
+                    </layout></widget></item>
+                    <!-- Groupe « Site rattaché » : nom et numéro du site, ID site (parc) et ID site (FK). -->
+                    <item><widget class="QGroupBox" name="group_site_rattache"><property name="title"><string>Site rattaché</string></property><layout class="QVBoxLayout" name="group_site_rattache_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_nom_site">
+                        <property name="text"><string>Nom du site : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_nom_site">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_num_site">
+                        <property name="text"><string>N° site : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_num_site">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_id_site_cen_parc">
+                        <property name="text"><string>ID site (parc) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_id_site_cen_parc">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_id_site_fcen_parc">
+                        <property name="text"><string>ID site (FK) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_id_site_fcen_parc">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                  </layout></widget></item>
+                  <!-- Groupe « Localisation administrative » : codes INSEE de la commune et du département. -->
+                  <item><widget class="QGroupBox" name="group_localisation_administrative"><property name="title"><string>Localisation administrative</string></property><layout class="QVBoxLayout" name="group_localisation_administrative_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_insee_com">
+                        <property name="text"><string>Commune (INSEE) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_insee_com">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_insee_dep">
+                        <property name="text"><string>Département (INSEE) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_insee_dep">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                  </layout></widget></item>
+                  <!-- Groupe « Surfaces » : surface maîtrisée (ha et m²) et surface SIG (ha). -->
+                  <item><widget class="QGroupBox" name="group_surfaces"><property name="title"><string>Surfaces</string></property><layout class="QVBoxLayout" name="group_surfaces_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_surf_parc_maitrise_ha">
+                        <property name="text"><string>Surface maîtrisée (ha) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_surf_parc_maitrise_ha">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_surf_parc_maitrise_m2">
+                        <property name="text"><string>Surface maîtrisée (m²) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_surf_parc_maitrise_m2">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_s_sig_ha">
+                        <property name="text"><string>Surface SIG (ha) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_s_sig_ha">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                  </layout></widget></item>
+                  <!-- Groupe « Occupation et gestion » : codes MFU 1 et 2, type de propriété, domaine
+                       public, gestion RNX, BND, parcelle Natura 2000, part (%). -->
+                  <item><widget class="QGroupBox" name="group_occupation_et_gestion"><property name="title"><string>Occupation et gestion</string></property><layout class="QVBoxLayout" name="group_occupation_et_gestion_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_code_mfu1">
+                        <property name="text"><string>Code MFU 1 : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_code_mfu1">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_code_mfu2">
+                        <property name="text"><string>Code MFU 2 : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_code_mfu2">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_type_prop">
+                        <property name="text"><string>Type de propriété : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_type_prop">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_domaine_public">
+                        <property name="text"><string>Domaine public : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_domaine_public">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_parc_gestion_rnx">
+                        <property name="text"><string>Gestion RNX : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_parc_gestion_rnx">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_bnd">
+                        <property name="text"><string>BND : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_bnd">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_parc_N2000">
+                        <property name="text"><string>Parcelle Natura 2000 : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_parc_N2000">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                  <item>
+                      <widget class="QLabel" name="lbl_txtParc_pour_part">
+                        <property name="text"><string>Pour part (%) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_pour_part">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    </layout></widget></item>
+                    <!-- Groupe « Qualité de la donnée » : source de la géométrie (nature, date), échelle de
+                         numérisation, source de la surface, dates de mise à jour de la parcelle. -->
+                    <item><widget class="QGroupBox" name="group_qualite_de_la_donnee_geometrique"><property name="title"><string>Qualité de la donnée</string></property><layout class="QVBoxLayout" name="group_qualite_de_la_donnee_geometrique_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_source_geom_parc_nature">
+                        <property name="text"><string>Source géométrie (nature) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_source_geom_parc_nature">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_source_geom_parc_date">
+                        <property name="text"><string>Source géométrie (date) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_source_geom_parc_date">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_echelle_num_parc">
+                        <property name="text"><string>Échelle de numérisation : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_echelle_num_parc">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_source_surf_parc">
+                        <property name="text"><string>Source de la surface : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_source_surf_parc">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_date_maj_parcelle">
+                        <property name="text"><string>Date MàJ parcelle : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_date_maj_parcelle">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_date_maj_p">
+                        <property name="text"><string>Date MàJ (p) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_date_maj_p">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                  </layout></widget></item>
+                  <!-- Groupe « Foncier et propriété » : ID propriétaire, propriétaires, tréfonds, FDD,
+                       document foncier et sa source, date d'acquisition. -->
+                  <item><widget class="QGroupBox" name="group_foncier_et_propriete"><property name="title"><string>Foncier et propriété</string></property><layout class="QVBoxLayout" name="group_foncier_et_propriete_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_id_proprietaire">
+                        <property name="text"><string>ID propriétaire : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_id_proprietaire">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_proprietaires">
+                        <property name="text"><string>Propriétaires : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_proprietaires">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_tresfonds">
+                        <property name="text"><string>Tréfonds : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_tresfonds">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_fdd">
+                        <property name="text"><string>FDD : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_fdd">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_doc_foncier">
+                        <property name="text"><string>Document foncier : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_doc_foncier">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_source_doc_foncier">
+                        <property name="text"><string>Source doc. foncier : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_source_doc_foncier">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_date_acquisition">
+                        <property name="text"><string>Date d'acquisition : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_date_acquisition">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                  </layout></widget></item>
+                  <!-- Groupe « ORE et compensation » : mesure compensatoire, surface ORE (m²), dates de
+                       début et de fin de convention (ORE = obligation réelle environnementale). -->
+                  <item><widget class="QGroupBox" name="group_ore_et_compensation"><property name="title"><string>ORE et compensation</string></property><layout class="QVBoxLayout" name="group_ore_et_compensation_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_mesure_compens">
+                        <property name="text"><string>Mesure compensatoire : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_mesure_compens">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_surf_ore_m2">
+                        <property name="text"><string>Surface ORE (m²) : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_surf_ore_m2">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_date_debut_ore">
+                        <property name="text"><string>Date début convention : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_date_debut_ore">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_date_fin_ore">
+                        <property name="text"><string>Date fin convention : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_date_fin_ore">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                  </layout></widget></item>
+                  <!-- Groupe « ZPF » (parcelle) : ZPF, mode, surface et date. -->
+                  <item><widget class="QGroupBox" name="group_zpf"><property name="title"><string>ZPF</string></property><layout class="QVBoxLayout" name="group_zpf_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_ZPF">
+                        <property name="text"><string>ZPF : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_ZPF">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_mode_ZPF">
+                        <property name="text"><string>Mode ZPF : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_mode_ZPF">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_surface_ZPF">
+                        <property name="text"><string>Surface ZPF : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_surface_ZPF">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_date_ZPF">
+                        <property name="text"><string>Date ZPF : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_date_ZPF">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                  </layout></widget></item>
+                  <!-- Groupe « Transactions / SAFER » : intervention SAFER, financeurs, prix/ha net
+                       vendeur, prix/ha d'achat, actes. -->
+                  <item><widget class="QGroupBox" name="group_transactions___safer"><property name="title"><string>Transactions / SAFER</string></property><layout class="QVBoxLayout" name="group_transactions___safer_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_intervention_SAFER">
+                        <property name="text"><string>Intervention SAFER : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_intervention_SAFER">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_financeurs">
+                        <property name="text"><string>Financeurs : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_financeurs">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_prix_ha_net_vendeur">
+                        <property name="text"><string>Prix/ha net vendeur : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_prix_ha_net_vendeur">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_prix_ha_achat">
+                        <property name="text"><string>Prix/ha achat : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_prix_ha_achat">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QLabel" name="lbl_txtParc_actes">
+                        <property name="text"><string>Actes : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QLineEdit" name="txtParc_actes">
+                        <property name="readOnly"><bool>true</bool></property>
+                      </widget>
+                    </item>
+                  </layout></widget></item>
+                  <!-- Groupe « Remarques » : zone de texte libre (txtParc_remarques). -->
+                  <item><widget class="QGroupBox" name="group_remarques"><property name="title"><string>Remarques</string></property><layout class="QVBoxLayout" name="group_remarques_layout"><item>
+                      <widget class="QLabel" name="lbl_txtParc_remarques">
+                        <property name="text"><string>Remarques : &lt;a href="?" style="text-decoration:none;"&gt;❓&lt;/a&gt;</string></property>
+                      <property name="textFormat"><enum>Qt::RichText</enum></property><property name="textInteractionFlags"><set>Qt::LinksAccessibleByMouse</set></property></widget>
+                    </item>
+                    <item>
+                      <widget class="QTextEdit" name="txtParc_remarques">
+                        <property name="readOnly"><bool>true</bool></property>
+                        <property name="minimumSize"><size><width>0</width><height>60</height></size></property>
+                      </widget>
+                    </item>
+                  </layout></widget></item><item><spacer name="parcelleDetailSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item></layout></widget></widget></widget>
+              </item>
+            </layout>
+          </widget>
+          </widget> </item>
 
+      <!-- ==========================================================================
+           3. BARRE DE BOUTONS DU BAS (bottomLayout)
+
+           Un ressort (horizontalSpacer) pousse les boutons à droite. Puis :
+             - btnCancel « Annuler » : reject(), ferme la fenêtre sans enregistrer.
+             - btnApply « Appliquer » : save_current_feature(), enregistre le site courant
+               sans fermer la fenêtre.
+             - button_box (bouton OK) : save_and_close(), enregistre puis ferme.
+           Les connexions sont faites dans connect_signals() (dialog_ui_mixin.py).
+           ========================================================================== -->
       <item>
         <layout class="QHBoxLayout" name="bottomLayout">
           <property name="spacing">
@@ -614,6 +1641,19 @@
             </spacer>
           </item>
           <item>
+            <widget class="QPushButton" name="btnCancel">
+              <property name="text">
+                <string>Annuler</string>
+              </property>
+              <property name="minimumSize">
+                <size>
+                  <width>100</width>
+                  <height>30</height>
+                </size>
+              </property>
+            </widget>
+          </item>
+          <item>
             <widget class="QPushButton" name="btnApply">
               <property name="text">
                 <string>Appliquer</string>
@@ -629,7 +1669,7 @@
           <item>
             <widget class="QDialogButtonBox" name="button_box">
               <property name="standardButtons">
-                <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+                <set>QDialogButtonBox::Ok</set>
               </property>
             </widget>
           </item>

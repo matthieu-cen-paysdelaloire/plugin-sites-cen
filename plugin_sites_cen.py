@@ -11,16 +11,20 @@
         email                : m.goubert@cenpaysdelaloire.fr
  ***************************************************************************/
 """
-
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
-from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QFileDialog
-from qgis.core import QgsProject, QgsVectorLayer
+# Imports des modules nécessaires pour le bon fonctionnement du plugin
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication   
+from qgis.PyQt.QtGui import QIcon                                       
+from qgis.PyQt.QtWidgets import QAction, QFileDialog, QMessageBox        
+from qgis.core import QgsProject, QgsVectorLayer                        
 import os.path
 
 # Import du dialogue
 from .plugin_sites_cen_dialog import AttributeEditorSitesCENDialog
 
+# Import du module de création de raccourci Bureau (lancement autonome, sans QGIS)
+from . import shortcut_creator
+
+# Création du point d'entrée du plugin, la classe principale 
 class AttributeEditorSitesCEN:
     def __init__(self, iface):
         self.iface = iface
@@ -29,17 +33,36 @@ class AttributeEditorSitesCEN:
         self.menu = self.tr(u'&MAJ des sites CEN')
         self.dlg = None # On initialise à None
 
+    # Méthode de traduction, pour traduire en d'autres langues si besoin
     def tr(self, message):
         return QCoreApplication.translate('AttributeEditorSitesCEN', message)
 
+    # Initialisation de l'interface QGIS, création du bouton d'accès "MAJ des sites CEN"
     def initGui(self):
-        # On désactive l'icône de ressource pour éviter l'erreur classFactory
+        icon_path = os.path.join(self.plugin_dir, 'resources', 'icon.png')
+        icon_path = icon_path if os.path.isfile(icon_path) else None
+
+        # Icône dédiée au bouton "raccourci" (fond marron clair), différente de
+        # celle du bouton principal (fond vert), pour pouvoir distinguer les
+        # deux boutons dans la barre d'outils / le menu de QGIS.
+        shortcut_icon_path = os.path.join(self.plugin_dir, 'resources', 'icon_shortcut.png')
+        shortcut_icon_path = shortcut_icon_path if os.path.isfile(shortcut_icon_path) else icon_path
+
         self.add_action(
-            None, 
+            icon_path, 
             text=self.tr(u'MAJ des sites CEN'),
             callback=self.run,
             parent=self.iface.mainWindow())
 
+        # Bouton supplémentaire, indépendant du formulaire d'édition : permet de
+        # créer un raccourci sur le Bureau pour ouvrir le plugin sans passer par QGIS.
+        self.add_action(
+            shortcut_icon_path,
+            text=self.tr(u'Créer un raccourci sur le Bureau'),
+            callback=self.run_create_shortcut,
+            parent=self.iface.mainWindow())
+
+    # Mise en place du bouton dans les extensions de QGIS
     def add_action(self, icon_path, text, callback, enabled_flag=True, 
                    add_to_menu=True, add_to_toolbar=True, parent=None):
         icon = QIcon(icon_path) if icon_path else QIcon()
@@ -53,11 +76,13 @@ class AttributeEditorSitesCEN:
         self.actions.append(action)
         return action
 
+    # Méthode obligatoire appelée lorsque l'utilisateur désactive ou désinstalle le plugin.
     def unload(self):
         for action in self.actions:
             self.iface.removePluginMenu(self.tr(u'&MAJ des sites CEN'), action)
             self.iface.removeToolBarIcon(action)
 
+    # Exécution de la méthode 'run' dès que l'utilisateur clique sur le boutton 'MAJ des sites CEN' dans l'instance de QGIS
     def run(self):
         # 1. Sélection du fichier GeoPackage
         filename, _ = QFileDialog.getOpenFileName(
@@ -77,16 +102,51 @@ class AttributeEditorSitesCEN:
             self.iface.messageBar().pushMessage("Erreur", "Couche introuvable dans le GPKG", level=3)
             return
 
-        # 3. Lancement du dialogue
-        if self.dlg is None:
-            self.dlg = AttributeEditorSitesCENDialog()
+        # 2bis. Chargement de la couche des parcelles (sous-formulaire), en complément de sites_cen
+        uri_parcelles = f"{filename}|layername=parcelles_cen"
+        parcelles_layer = QgsVectorLayer(uri_parcelles, "Parcelles CEN", "ogr")
+        if not parcelles_layer.isValid():
+            self.iface.messageBar().pushMessage(
+                "Attention",
+                "Couche 'parcelles_cen' introuvable : le sous-formulaire des parcelles sera désactivé.",
+                level=1)
+            parcelles_layer = None
 
-        # Remplissage de la liste à gauche (méthode créée dans le précédent message)
-        self.dlg.populate_list(layer)
-        
-        self.dlg.show()
-        result = self.dlg.exec_()
+        # 3. Lancement du dialogue
+        # Toute erreur pendant la création, le remplissage ou l'affichage est interceptée
+        # ici : si on laissait l'exception remonter sans rien faire, self.dlg resterait
+        # une instance à moitié initialisée, réutilisée telle quelle au prochain clic
+        # (d'où le besoin, avant ce correctif, de relancer QGIS pour repartir proprement).
+        try:
+            if self.dlg is None:
+                self.dlg = AttributeEditorSitesCENDialog()
+
+            # Remplissage de la liste à gauche (méthode créée dans le précédent message)
+            self.dlg.populate_list(layer, parcelles_layer)
+
+            self.dlg.show()
+        except Exception as e:
+            self.dlg = None  # on jette l'instance potentiellement corrompue
+            QMessageBox.critical(
+                self.iface.mainWindow(),
+                "Erreur",
+                "Une erreur est survenue à l'ouverture du formulaire :\n\n"
+                f"{e}\n\n"
+                "Vous pouvez réessayer directement (pas besoin de relancer QGIS).")
+            return
+        result = self.dlg.exec()
         
         if result:
             # Sauvegarde globale si nécessaire
             pass
+
+    # Création d'un raccourci sur le Bureau permettant d'ouvrir le plugin
+    # directement, sans passer par l'interface de QGIS (QGIS doit rester installé).
+    # Cette méthode est totalement indépendante de 'run' et du formulaire .ui :
+    # elle ne modifie rien d'autre que la création d'un fichier de raccourci.
+    def run_create_shortcut(self):
+        success, message = shortcut_creator.create_desktop_shortcut(parent=self.iface.mainWindow())
+        if success:
+            QMessageBox.information(self.iface.mainWindow(), "Raccourci créé", message)
+        else:
+            QMessageBox.warning(self.iface.mainWindow(), "Raccourci non créé", message)
