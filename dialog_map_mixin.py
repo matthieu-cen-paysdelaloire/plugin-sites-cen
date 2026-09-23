@@ -70,7 +70,7 @@ AUTO_FAR_KEY = "osm"
 AUTO_NEAR_KEY = "ign_ortho"
 
 DEFAULT_MODE = "osm"
-SETTINGS_KEY = "attribute_editor_sites_cen/fond_de_plan"
+SETTINGS_KEY = "plugin_sites_cen/fond_de_plan"
 
 
 class _OverlayPositioner(QtCore.QObject):
