@@ -4,7 +4,7 @@ Ce plugin permet la consultation et la mise à jour simplifiée des données att
 
 => Lien du dépôt GitHub : https://github.com/matthieu-cen-paysdelaloire/plugin-sites-cen.git
 
-=> Version : 2.0 (2026)
+=> Version : 2.1 (2026)
 
 => Nouveautés : 
     - Répartition du formulaire des sites en différents onglets et sous-onglets
@@ -15,7 +15,10 @@ Ce plugin permet la consultation et la mise à jour simplifiée des données att
     - Création d'un boutton permettant la mise en place d'un raccourci sur le bureau de l'utilisateur
 
 
-=>  Structure des fichiers : Disponible dans le fichier "Architecture du plugin QGIS"
+=>  Structure des fichiers : 
+
+![Schéma d'architecture du plugin](schema_architecture/legende_schema_architecture.png "Schéma d'architecture du plugin")
+![Légende du schéma d'architecture du plugin](images/schema_architecture_plugin_MAJ_sites_CEN.png "Légende du schéma d'architecture du plugin")
 
 
 =>  Prérequis sur les données (Couche SIG)
