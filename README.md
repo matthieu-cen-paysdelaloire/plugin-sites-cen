@@ -17,9 +17,8 @@ Ce plugin permet la consultation et la mise à jour simplifiée des données att
 
 =>  Structure des fichiers : 
 
-![Schéma d'architecture du plugin](schema_architecture/schema_architecture_plugin_MAJ_sites_CEN.png "Schéma d'architecture du plugin")
-![Légende du schéma d'architecture du plugin](schema_architecture/legende_schema_architecture.png "Légende du schéma d'architecture du plugin")
-
+<img src="schema_architecture/schema_architecture_plugin_MAJ_sites_CEN.png" alt="Schéma d'architecture du plugin" width="300" height="600">
+<img src="schema_architecture/legende_schema_architecture.png" alt="Légende du schéma d'architecture du plugin" width="50" height="100">
 
 =>  Prérequis sur les données (Couche SIG)
 
