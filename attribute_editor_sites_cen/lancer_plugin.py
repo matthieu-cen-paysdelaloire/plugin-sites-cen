@@ -65,6 +65,8 @@ def demarrer_qgis():
 
 def charger_couches(chemin_gpkg):
     """Charge les couches sites_cen et parcelles_cen depuis le GeoPackage sélectionné."""
+    # Fonction pouvant être réutilisé dans le module "plugin_sites_cen.py" aux lignes 96-113
+    
     from qgis.core import QgsVectorLayer
 
     uri_sites = f"{chemin_gpkg}|layername=sites_cen"

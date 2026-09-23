@@ -10,12 +10,13 @@ de saisie (dans formStack), à la manière du sous-formulaire des parcelles.
 
 Ce mixin n'est PAS utilisable seul : il est combiné avec QtWidgets.QDialog (et
 les autres mixins) dans AttributeEditorSitesCENDialog.
+Cependant, il est "indépendant" de l'interface de saisie globale ("plugin_sites_cen_dialog_base.ui").
 """
 import datetime
 
 from qgis.PyQt import QtWidgets, QtGui, QtCore
 
-from . import dialog_bilan_data as bilan_data
+from .. import dialog_bilan_data as bilan_data
 from .chart_widgets import InteractiveBarChart, InteractivePieChart, InteractiveLineChart
 
 

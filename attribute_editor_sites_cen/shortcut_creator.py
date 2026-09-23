@@ -239,7 +239,7 @@ def _create_windows_shortcut(launcher_script, plugin_dir, icon_dir, desktop, pre
             pass
 
     return True, (
-        f"Raccourci créé sur le Bureau :\n{shortcut_path}\n\n"
+        f"Raccourci créé dans votre dossier d'utilisateur, retrouvable en suivant le chemin d'acès suivant :\n{shortcut_path}\n\n"
         "Note : si ce raccourci est partagé avec un(e) collègue, il ne fonctionnera "
         "que si cette personne a elle aussi installé le plugin dans son propre profil "
         "QGIS (chaque compte Windows a son propre dossier de plugins)."

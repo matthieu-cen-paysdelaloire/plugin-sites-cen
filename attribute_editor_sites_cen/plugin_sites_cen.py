@@ -22,7 +22,7 @@ import os.path
 from .plugin_sites_cen_dialog import AttributeEditorSitesCENDialog
 
 # Import du module de création de raccourci Bureau (lancement autonome, sans QGIS)
-from . import shortcut_creator
+from .. import shortcut_creator
 
 # Création du point d'entrée du plugin, la classe principale 
 class AttributeEditorSitesCEN:
@@ -94,7 +94,7 @@ class AttributeEditorSitesCEN:
             return
 
         # 2. Chargement de la couche
-        # ATTENTION : Remplacez 'sites_cen' par le nom REEL de votre table GPKG
+        # Il est possible d'utiliser la fonction 'charger_couches' (L66-78) disponible dans le fichier "lancer_plugin.py" 
         uri = f"{filename}|layername=sites_cen"
         layer = QgsVectorLayer(uri, "Edition Sites CEN", "ogr")
 
@@ -140,8 +140,8 @@ class AttributeEditorSitesCEN:
             # Sauvegarde globale si nécessaire
             pass
 
-    # Création d'un raccourci sur le Bureau permettant d'ouvrir le plugin
-    # directement, sans passer par l'interface de QGIS (QGIS doit rester installé).
+    # Lancement du raccourci sur le Bureau, en utilisant la fonction 'create_desktop_shortcut' du fichier "shortcut_creator.py"
+    # Permet d'ouvrir le plugin directement, sans passer par l'interface de QGIS (QGIS doit rester installé).
     # Cette méthode est totalement indépendante de 'run' et du formulaire .ui :
     # elle ne modifie rien d'autre que la création d'un fichier de raccourci.
     def run_create_shortcut(self):
