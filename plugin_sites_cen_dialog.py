@@ -20,8 +20,8 @@ centré sur une responsabilité :
 import os
 from qgis.PyQt import uic, QtWidgets, QtCore
 
-from .. import dialog_data as data
-from .. import dialog_field_maps as field_maps
+from . import dialog_data as data
+from . import dialog_field_maps as field_maps
 from .dialog_map_mixin import MapMixin
 from .dialog_validation_mixin import ValidationMixin
 from .dialog_sites_mixin import SitesMixin

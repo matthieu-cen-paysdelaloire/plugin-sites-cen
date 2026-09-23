@@ -16,7 +16,7 @@ import datetime
 
 from qgis.PyQt import QtWidgets, QtGui, QtCore
 
-from .. import dialog_bilan_data as bilan_data
+from . import dialog_bilan_data as bilan_data
 from .chart_widgets import InteractiveBarChart, InteractivePieChart, InteractiveLineChart
 
 
