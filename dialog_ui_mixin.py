@@ -7,8 +7,8 @@ des signaux, bascule "vue simplifiée / mode édition", et filtre d'événements
 """
 from qgis.PyQt import QtWidgets, QtCore, QtGui
 
-from .. import dialog_data as data
-from .. import dialog_field_maps as field_maps
+from . import dialog_data as data
+from . import dialog_field_maps as field_maps
 
 
 class UiMixin:

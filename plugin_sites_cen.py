@@ -22,7 +22,7 @@ import os.path
 from .plugin_sites_cen_dialog import AttributeEditorSitesCENDialog
 
 # Import du module de création de raccourci Bureau (lancement autonome, sans QGIS)
-from .. import shortcut_creator
+from . import shortcut_creator
 
 # Création du point d'entrée du plugin, la classe principale 
 class AttributeEditorSitesCEN:

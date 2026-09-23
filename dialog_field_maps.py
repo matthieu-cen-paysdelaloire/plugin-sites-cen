@@ -8,7 +8,7 @@ dialogue (dlg) déjà passée par setupUi(), puisqu'ils référencent directemen
 widgets. Ils sont donc construits par de simples fonctions prenant "dlg" en
 paramètre, appelées une fois depuis __init__.
 """
-from .. import dialog_data as data
+from . import dialog_data as data
 
 
 def build_parcelle_field_map(dlg):
