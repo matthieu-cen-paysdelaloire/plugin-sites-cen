@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Mixin regroupant tout ce qui concerne le canevas cartographique embarqué dans le
-dialogue : création du canevas, fond de plan OpenStreetMap, style de la couche des
+dialogue : création du canevas, fonds de plan (OpenStreetMap, photographies aériennes
+IGN, Plan IGN, mode automatique selon le zoom) avec leur sélecteur flottant, style de la couche des
 sites, surbrillance/zoom sur l'entité sélectionnée (site ou parcelle), et
 sélection d'une entité PAR CLIC directement sur la carte.
 
@@ -14,6 +15,96 @@ import os
 
 from qgis.PyQt import QtWidgets, QtGui, QtCore
 from qgis.gui import QgsMapToolPan
+
+
+# QActionGroup a changé de module entre Qt5 (QtWidgets) et Qt6 (QtGui) : QGIS 3 / QGIS 4
+try:
+    _QActionGroup = QtGui.QActionGroup
+except AttributeError:
+    _QActionGroup = QtWidgets.QActionGroup
+
+
+# ======================================================================
+# FONDS DE PLAN : catalogue + contrôleur de couches
+# ======================================================================
+# Ajouter un nouveau fond = ajouter une entrée dans BASEMAPS ci-dessous, rien d'autre.
+
+# ----------------------------------------------------------------------
+# Catalogue des fonds de plan (tuiles XYZ, toutes en EPSG:3857 comme le canevas)
+# ----------------------------------------------------------------------
+# Les flux IGN sont servis par la Géoplateforme (data.geopf.fr) : accès libre, sans clé.
+# Ils sont appelés en WMTS "déguisé" en XYZ, avec la pyramide standard PM (Pseudo-Mercator).
+_IGN_WMTS = (
+    "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
+    "&LAYER={layer}&STYLE=normal&TILEMATRIXSET=PM&FORMAT={fmt}"
+    "&TILEMATRIX={{z}}&TILEROW={{y}}&TILECOL={{x}}"
+)
+
+BASEMAPS = {
+    "osm": {
+        "label": "Plan OpenStreetMap",
+        "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "zmin": 0, "zmax": 19,
+        "attribution": "© contributeurs OpenStreetMap",
+    },
+    "ign_ortho": {
+        "label": "Photographies aériennes (IGN)",
+        "url": _IGN_WMTS.format(layer="ORTHOIMAGERY.ORTHOPHOTOS", fmt="image/jpeg"),
+        "zmin": 0, "zmax": 19,
+        "attribution": "© IGN – Géoplateforme",
+    },
+    "ign_plan": {
+        "label": "Plan IGN",
+        "url": _IGN_WMTS.format(layer="GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", fmt="image/png"),
+        "zmin": 0, "zmax": 19,
+        "attribution": "© IGN – Géoplateforme",
+    },
+}
+
+# Mode spécial (pas un fond en soi) : choisit le fond selon l'échelle courante
+AUTO_MODE = "auto"
+AUTO_LABEL = "Automatique (plan ↔ photo selon le zoom)"
+# En dessous de cette échelle (1:10 000 et plus zoomé), le mode auto passe en photo aérienne
+AUTO_SWITCH_SCALE = 10000
+AUTO_FAR_KEY = "osm"
+AUTO_NEAR_KEY = "ign_ortho"
+
+DEFAULT_MODE = "osm"
+SETTINGS_KEY = "attribute_editor_sites_cen/fond_de_plan"
+
+
+class _OverlayPositioner(QtCore.QObject):
+    """
+    Filtre d'événements dédié qui repositionne les widgets flottants (bouton de choix du
+    fond, mention des sources) à chaque redimensionnement du canevas.
+
+    Volontairement un QObject séparé : le dialogue possède déjà son propre eventFilter
+    (UiMixin, gestion de la molette sur les listes déroulantes), qu'on ne veut pas toucher.
+    """
+    MARGIN = 6
+
+    def __init__(self, canvas, top_right_widget, bottom_right_widget):
+        super().__init__(canvas)
+        self._canvas = canvas
+        self._top_right = top_right_widget
+        self._bottom_right = bottom_right_widget
+        canvas.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj is self._canvas and event.type() in (QtCore.QEvent.Type.Resize, QtCore.QEvent.Type.Show):
+            self.reposition()
+        return False  # on ne consomme jamais l'événement
+
+    def reposition(self):
+        w, h, m = self._canvas.width(), self._canvas.height(), self.MARGIN
+        tr = self._top_right
+        tr.adjustSize()
+        tr.move(max(0, w - tr.width() - m), m)
+        br = self._bottom_right
+        br.adjustSize()
+        br.move(max(0, w - br.width()), max(0, h - br.height()))
+        tr.raise_()
+        br.raise_()
 
 
 def _nice_scale_distance(raw_distance):
@@ -257,17 +348,13 @@ class MapMixin:
         self.map_canvas.setCanvasColor(QtGui.QColor(255, 255, 255))
         self.map_canvas.setDestinationCrs(QgsCoordinateReferenceSystem("EPSG:3857"))
 
-        # Fond de plan OpenStreetMap (tuiles XYZ), chargé comme une couche raster classique
-        osm_uri = "type=xyz&url=https://tile.openstreetmap.org/{z}/{x}/{y}.png&zmax=19&zmin=0"
-        self.osm_layer = QgsRasterLayer(osm_uri, "OpenStreetMap", "wms")
-        if self.osm_layer.isValid():
-            self.map_canvas.setLayers([self.osm_layer])
-            self.map_canvas.setExtent(self.osm_layer.extent())
-        else:
-            # Si les tuiles ne sont pas accessibles (pas de réseau), la carte reste vide mais fonctionnelle
-            if self.iface:
-                self.iface.messageBar().pushMessage(
-                    "Attention", "Fond OpenStreetMap indisponible (vérifiez la connexion internet).", level=1)
+        # Fond de plan : voir la section "FONDS DE PLAN" en bas de ce fichier. Plusieurs fonds sont
+        # disponibles (OSM, photographies aériennes IGN, Plan IGN, mode automatique) ; on
+        # affiche ici le dernier choix mémorisé de l'utilisateur.
+        self.init_basemap()
+        if self.basemap_layer is not None:
+            self.map_canvas.setLayers([self.basemap_layer])
+            self.map_canvas.setExtent(self.basemap_layer.extent())
 
         # Insertion du canevas dans le conteneur prévu par le .ui
         layout = self.mapContainer.layout()
@@ -275,6 +362,9 @@ class MapMixin:
             layout = QtWidgets.QVBoxLayout(self.mapContainer)
             layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.map_canvas)
+
+        # Contrôleur de couches flottant (choix du fond de plan) + mention des sources
+        self.setup_basemap_switcher()
 
         # --- BARRE D'ÉCHELLE INTERACTIVE + BOUTONS DE ZOOM ---
         # Placée sous la carte, à la manière de la barre d'état de QGIS. L'échelle peut être
@@ -326,6 +416,13 @@ class MapMixin:
         # à partir du nombre d'unités-carte par pixel écran (mètres, car canevas en EPSG:3857)
         self.map_canvas.extentsChanged.connect(self._update_graphical_scale_bar)
 
+        # --- SÉLECTION D'ENTITÉ PAR CLIC SUR LA CARTE ---
+        # L'outil reste actif en permanence (pas besoin d'activer un mode particulier) :
+        # un simple clic identifie l'entité sous le curseur, un glisser déplace la carte.
+        self.map_click_tool = _ClickIdentifyTool(self.map_canvas, self.on_map_canvas_clicked)
+        self.map_canvas.setMapTool(self.map_click_tool)
+        self.map_canvas.setCursor(QtCore.Qt.CursorShape.CrossCursor)
+
         self.map_canvas.refresh()
         self._update_graphical_scale_bar()  # premier affichage, une fois l'étendue initiale posée
 
@@ -359,12 +456,6 @@ class MapMixin:
             return
         self.graphical_scale_bar.update_from_map_units_per_pixel(self.map_canvas.mapUnitsPerPixel())
 
-        # --- SÉLECTION D'ENTITÉ PAR CLIC SUR LA CARTE ---
-        # L'outil reste actif en permanence (pas besoin d'activer un mode particulier) :
-        # un simple clic identifie l'entité sous le curseur, un glisser déplace la carte.
-        self.map_click_tool = _ClickIdentifyTool(self.map_canvas, self.on_map_canvas_clicked)
-        self.map_canvas.setMapTool(self.map_click_tool)
-        self.map_canvas.setCursor(QtCore.Qt.CursorShape.CrossCursor)
 
     def on_map_canvas_clicked(self, canvas_point):
         """
@@ -554,7 +645,7 @@ class MapMixin:
     def _refresh_canvas_layers(self):
         """
         Reconstruit la liste des couches affichées sur la carte, dans l'ordre :
-        aperçu des parcelles (si actif) > site(s) > fond OpenStreetMap.
+        aperçu des parcelles (si actif) > site(s) > fond de plan (OSM, IGN...).
         """
         if not self.map_canvas:
             return
@@ -565,8 +656,9 @@ class MapMixin:
             layers.append(outline_layer)
         if self.layer is not None:
             layers.append(self.layer)
-        if self.osm_layer is not None and self.osm_layer.isValid():
-            layers.append(self.osm_layer)
+        basemap = getattr(self, 'basemap_layer', None)
+        if basemap is not None and basemap.isValid():
+            layers.append(basemap)
 
         self.map_canvas.setLayers(layers)
         self.map_canvas.refresh()
@@ -660,3 +752,216 @@ class MapMixin:
         self.map_highlight.show()
 
         self.map_canvas.refresh()
+
+    # ==================================================================
+    # FONDS DE PLAN (OSM / photographies aériennes IGN / Plan IGN / auto)
+    # ==================================================================
+    # ------------------------------------------------------------------
+    # Initialisation
+    # ------------------------------------------------------------------
+
+    def init_basemap(self):
+        """
+        Crée le fond de plan initial (dernier choix mémorisé, OSM par défaut). À appeler
+        juste après la création de self.map_canvas, AVANT le cadrage initial de la carte.
+        """
+        self._basemap_layers = {}           # cache : clé -> QgsRasterLayer (créés à la demande)
+        self._current_basemap_key = None    # fond réellement affiché
+        self._basemap_warned = set()        # fonds déjà signalés indisponibles (évite le spam)
+        self.basemap_layer = None
+
+        mode = self._load_basemap_preference()
+        if mode != AUTO_MODE and mode not in BASEMAPS:
+            mode = DEFAULT_MODE
+        self._basemap_mode = mode
+        self._apply_effective_basemap(refresh=False)
+
+    def setup_basemap_switcher(self):
+        """
+        Construit le contrôleur de couches flottant (en haut à droite de la carte) et la
+        mention des sources (en bas à droite). À appeler une fois le canevas inséré dans
+        son layout.
+        """
+        canvas = self.map_canvas
+
+        # --- Bouton + menu de choix du fond ---
+        btn = QtWidgets.QToolButton(canvas)
+        btn.setText("🗺️ Fond de plan")
+        btn.setToolTip("Changer le fond de plan de la carte")
+        btn.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(
+            "QToolButton { background: rgba(255,255,255,235); border: 1px solid #b8c0cc;"
+            " border-radius: 4px; padding: 3px 8px; font-size: 9pt; color: #2c3e50; }"
+            "QToolButton:hover { background: #ffffff; border-color: #2980b9; }"
+            "QToolButton::menu-indicator { image: none; width: 0px; }"
+        )
+
+        menu = QtWidgets.QMenu(btn)
+        group = _QActionGroup(menu)
+        group.setExclusive(True)
+        self._basemap_actions = {}
+
+        entries = [(AUTO_MODE, AUTO_LABEL)] + [(key, cfg["label"]) for key, cfg in BASEMAPS.items()]
+        for i, (key, label) in enumerate(entries):
+            if i == 1:
+                menu.addSeparator()  # sépare le mode automatique des fonds "fixes"
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(key == self._basemap_mode)
+            action.setData(key)
+            group.addAction(action)
+            self._basemap_actions[key] = action
+
+        group.triggered.connect(lambda act: self.set_basemap_mode(act.data()))
+        btn.setMenu(menu)
+
+        # --- Mention des sources ---
+        attribution = QtWidgets.QLabel(canvas)
+        attribution.setStyleSheet(
+            "QLabel { background: rgba(255,255,255,190); color: #444; font-size: 7pt;"
+            " padding: 1px 4px; border-top-left-radius: 3px; }"
+        )
+        attribution.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+        self.basemap_button = btn
+        self.basemap_attribution_label = attribution
+        self._basemap_overlay_positioner = _OverlayPositioner(canvas, btn, attribution)
+
+        btn.show()
+        attribution.show()
+        self._update_basemap_attribution()
+
+        # Le mode automatique doit réévaluer le fond à chaque changement d'échelle
+        canvas.scaleChanged.connect(self._on_canvas_scale_changed_for_basemap)
+
+    # ------------------------------------------------------------------
+    # Changement de fond
+    # ------------------------------------------------------------------
+
+    def set_basemap_mode(self, mode):
+        """Change le mode de fond de plan ('auto' ou une clé de BASEMAPS) et le mémorise."""
+        if mode != AUTO_MODE and mode not in BASEMAPS:
+            return
+        self._basemap_mode = mode
+        self._save_basemap_preference(mode)
+        action = getattr(self, "_basemap_actions", {}).get(mode)
+        if action is not None and not action.isChecked():
+            action.setChecked(True)
+        self._apply_effective_basemap()
+
+    def _on_canvas_scale_changed_for_basemap(self, _scale):
+        if getattr(self, "_basemap_mode", None) == AUTO_MODE:
+            self._apply_effective_basemap()
+
+    def _effective_basemap_key(self):
+        """Fond à afficher réellement, compte tenu du mode et (en mode auto) de l'échelle."""
+        mode = getattr(self, "_basemap_mode", DEFAULT_MODE)
+        if mode != AUTO_MODE:
+            return mode
+        scale = self.map_canvas.scale() if self.map_canvas else 0
+        if scale and scale <= AUTO_SWITCH_SCALE:
+            return AUTO_NEAR_KEY
+        return AUTO_FAR_KEY
+
+    def _apply_effective_basemap(self, refresh=True):
+        """Affiche le fond correspondant au mode courant (sans rien faire s'il est déjà affiché)."""
+        if not self.map_canvas:
+            return
+        key = self._effective_basemap_key()
+        if key == self._current_basemap_key and self.basemap_layer is not None:
+            return
+
+        layer = self._get_basemap_layer(key)
+        if layer is None and key != DEFAULT_MODE:
+            # Fond demandé indisponible (réseau, service IGN en panne...) : repli sur OSM
+            self._warn_basemap_unavailable(key)
+            key = DEFAULT_MODE
+            layer = self._get_basemap_layer(key)
+        if layer is None:
+            self._warn_basemap_unavailable(key)
+
+        self._current_basemap_key = key if layer is not None else None
+        self.basemap_layer = layer
+        # Compatibilité : l'ancien code s'appuyait sur self.osm_layer comme "le" fond de plan
+        self.osm_layer = layer
+
+        self._update_basemap_attribution()
+        if refresh:
+            self._refresh_canvas_layers()
+
+    def _get_basemap_layer(self, key):
+        """Renvoie la couche raster du fond 'key' (créée au premier besoin puis mise en cache)."""
+        if key in self._basemap_layers:
+            return self._basemap_layers[key]
+
+        from qgis.core import QgsRasterLayer, QgsDataSourceUri
+
+        cfg = BASEMAPS[key]
+        # IMPORTANT : on passe par QgsDataSourceUri pour construire l'URI. Les URL IGN (WMTS)
+        # contiennent elles-mêmes des '&' et des '=', qui seraient sinon confondus avec les
+        # séparateurs de paramètres de l'URI QGIS ("type=xyz&url=...&zmax=...") : l'URI
+        # construite "à la main" par simple concaténation serait alors silencieusement tronquée.
+        uri = QgsDataSourceUri()
+        uri.setParam("type", "xyz")
+        uri.setParam("url", cfg["url"])
+        uri.setParam("zmin", str(cfg["zmin"]))
+        uri.setParam("zmax", str(cfg["zmax"]))
+        encoded = uri.encodedUri().data().decode("utf-8")
+
+        layer = QgsRasterLayer(encoded, cfg["label"], "wms")
+        if not layer.isValid():
+            layer = None
+        self._basemap_layers[key] = layer
+        return layer
+
+    # ------------------------------------------------------------------
+    # Affichage : attribution + avertissements
+    # ------------------------------------------------------------------
+
+    def _update_basemap_attribution(self):
+        label = getattr(self, "basemap_attribution_label", None)
+        if label is None:
+            return
+        key = self._current_basemap_key
+        label.setText(BASEMAPS[key]["attribution"] if key else "Fond de plan indisponible")
+
+        btn = getattr(self, "basemap_button", None)
+        if btn is not None and key:
+            suffix = " (auto)" if self._basemap_mode == AUTO_MODE else ""
+            btn.setToolTip(f"Fond actuel : {BASEMAPS[key]['label']}{suffix}\nCliquer pour changer")
+
+        positioner = getattr(self, "_basemap_overlay_positioner", None)
+        if positioner is not None:
+            positioner.reposition()
+
+    def _warn_basemap_unavailable(self, key):
+        if key in self._basemap_warned:
+            return
+        self._basemap_warned.add(key)
+        label = BASEMAPS.get(key, {}).get("label", key)
+        if getattr(self, "iface", None):
+            self.iface.messageBar().pushMessage(
+                "Attention",
+                f"Fond « {label} » indisponible (vérifiez la connexion internet).",
+                level=1)
+
+    # ------------------------------------------------------------------
+    # Mémorisation du choix
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _load_basemap_preference():
+        try:
+            from qgis.core import QgsSettings
+            return str(QgsSettings().value(SETTINGS_KEY, DEFAULT_MODE))
+        except Exception:
+            return DEFAULT_MODE
+
+    @staticmethod
+    def _save_basemap_preference(mode):
+        try:
+            from qgis.core import QgsSettings
+            QgsSettings().setValue(SETTINGS_KEY, mode)
+        except Exception:
+            pass  # la mémorisation est un confort : jamais bloquante
