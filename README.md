@@ -2,9 +2,12 @@
 
 Ce plugin permet la consultation et la mise à jour simplifiée des données attributaires des sites naturels gérés par le CEN Pays de la Loire. Il offre une interface ergonomique pour garantir la cohérence des données saisies par les agents.
 
+
 => Lien du dépôt GitHub : https://github.com/matthieu-cen-paysdelaloire/plugin-sites-cen.git
 
+
 => Version : 2.1 (2026)
+
 
 => Nouveautés :\
     - Répartition du formulaire des sites en différents onglets et sous-onglets\
@@ -18,6 +21,7 @@ Ce plugin permet la consultation et la mise à jour simplifiée des données att
 =>  Structure des fichiers : 
 
 ![Schéma d'architecture du plugin](schema_architecture/schema_architecture_avec_legende.png "Schéma d'architecture du plugin")
+
 
 =>  Prérequis sur les données (Couche SIG)
 
@@ -60,6 +64,7 @@ Fonds de plan de la carte :
 
 * Les fonds IGN proviennent de la Géoplateforme (data.geopf.fr), en accès libre et sans clé. Une connexion internet est nécessaire. Si un fond est indisponible, la carte revient automatiquement sur OpenStreetMap.
 
+
 =>  Installation manuelle :
 
     Copier le dossier du plugin dans le répertoire des extensions QGIS :
@@ -68,9 +73,12 @@ Fonds de plan de la carte :
 
     Activer l'extension dans QGIS : Extensions > Installer/Gérer les extensions.
 
+
 =>  Développeur : Matthieu Goubert
 
+
 =>  Organisation : Conservatoire d'Espaces Naturels - Pays de la Loire
+
 
 => Compatibilité / prérequis techniques :\
     - qgisMinimumVersion = 3.16\
