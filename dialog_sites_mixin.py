@@ -72,17 +72,19 @@ class SitesMixin:
 
     def apply_contrat_agri_lock(self):
         """
-        "Nombre de contrats agricoles" = 0 : il n'existe alors, par définition, aucune surface
-        sous contrat. On met donc automatiquement la surface de contrat à 0, puis on la
-        verrouille pour empêcher toute saisie contradictoire tant que le nombre reste à 0.
-        Dès que le nombre change (1 ou plus, ou "-- À renseigner --"), la surface est
-        redéverrouillée ; sa valeur n'est volontairement pas effacée.
+        "Nombre de contrats agricoles" = 0 : il n'existe alors, par définition, ni surface sous
+        contrat ni agriculteur concerné. On met donc automatiquement la surface de contrat et
+        le nombre d'agriculteurs à 0, puis on les verrouille pour empêcher toute saisie
+        contradictoire tant que le nombre de contrats reste à 0. Dès qu'il change (1 ou plus,
+        ou "-- À renseigner --"), ces champs sont redéverrouillés ; leurs valeurs ne sont
+        volontairement pas effacées.
         """
         aucun_contrat = self.spinContrats.value() == 0
 
-        if aucun_contrat:
-            self.spinSurfContrat.setValue(0)
-        self.spinSurfContrat.setEnabled(not aucun_contrat)
+        for widget in (self.spinSurfContrat, self.spinAgri):
+            if aucun_contrat:
+                widget.setValue(0)
+            widget.setEnabled(not aucun_contrat)
 
         self.check_field_validity()
 
