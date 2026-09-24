@@ -106,6 +106,10 @@ class UiMixin:
         # contradictoire (cf. apply_doc_gestion_lock). currentTextChanged (et non
         # currentIndexChanged) pour être également notifié lors du tout premier remplissage.
         self.cbDocPres.currentTextChanged.connect(self.apply_doc_gestion_lock)
+        
+        # "Nombre de contrats agricoles" = 0 : surface de contrat mise à 0 et verrouillée
+        # (cf. apply_contrat_agri_lock)
+        self.spinContrats.valueChanged.connect(self.apply_contrat_agri_lock)
 
         # Installation du filtre d'événements sur les listes déroulantes modifiables, pour pouvoir
         # bloquer leur interaction tant que le mode édition n'est pas activé (cf. toggle_simple_view)

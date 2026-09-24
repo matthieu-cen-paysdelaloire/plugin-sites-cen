@@ -70,6 +70,22 @@ class SitesMixin:
 
         self.check_field_validity()
 
+    def apply_contrat_agri_lock(self):
+        """
+        "Nombre de contrats agricoles" = 0 : il n'existe alors, par définition, aucune surface
+        sous contrat. On met donc automatiquement la surface de contrat à 0, puis on la
+        verrouille pour empêcher toute saisie contradictoire tant que le nombre reste à 0.
+        Dès que le nombre change (1 ou plus, ou "-- À renseigner --"), la surface est
+        redéverrouillée ; sa valeur n'est volontairement pas effacée.
+        """
+        aucun_contrat = self.spinContrats.value() == 0
+
+        if aucun_contrat:
+            self.spinSurfContrat.setValue(0)
+        self.spinSurfContrat.setEnabled(not aucun_contrat)
+
+        self.check_field_validity()
+
     def on_selection_changed(self):
         """
         Permet d'associer les descriptions des différents champs en fonction de la valeur contenue dans les dictionnaires de données
@@ -186,6 +202,11 @@ class SitesMixin:
             # même si une erreur imprévue est survenue plus haut, pour ne jamais laisser le
             # formulaire bloqué (carte, validation des champs, bloc géologique, etc.)
             self.blockSignals(False)
+        
+        try:
+            self.apply_contrat_agri_lock()
+        except Exception:
+            pass
 
         # Ces trois lignes sont volontairement protégées : elles DOIVENT s'exécuter à chaque
         # changement de site, sinon les champs affichés garderaient la couleur/l'état du site

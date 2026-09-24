@@ -54,9 +54,11 @@ class ValidationMixin:
             self.apply_highlight(s, s.value() <= -1)
 
         # LineEdits (Edition de texte (Une seule ligne))
-        lines = [self.txtGestionnaire, self.txtDocNom, self.txtUrlInpn, self.txtUrlCen, self.txtUrlPhoto, self.txtSite_responsable_de_site]
+        lines = [self.txtGestionnaire, self.txtDocNom, self.txtUrlInpn, self.txtUrlCen, self.txtSite_responsable_de_site]
         for l in lines:
             self.apply_highlight(l, l.text().strip() == "")
+
+        self.apply_highlight(self.txtUrlPhoto, False)  # champ facultatif : jamais en rouge
 
         # TextEdits (Edition de texte (Multi-lignes))
         self.apply_highlight(self.txtDescription, self.txtDescription.toPlainText().strip() == "")
@@ -143,7 +145,7 @@ class ValidationMixin:
         # signifie pas "non renseignée" mais "Pas de date à renseigner" coché volontairement
         # (réponse à part entière, cf. check_field_validity) - elles ne doivent donc jamais
         # faire compter un site comme incomplet.
-        excluded_fields = {"doc_gestion_date_ini", "doc_gestion_date_maj", "doc_gestion_date_fin"}
+        excluded_fields = {"doc_gestion_date_ini", "doc_gestion_date_maj", "doc_gestion_date_fin", "url_site_photo"}
 
         count = 0
         for field in self.field_map:
